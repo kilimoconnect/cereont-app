@@ -152,18 +152,16 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  /// Creates the user's company and switches into it.
+  /// Creates the user's company and switches into it. Errors propagate to the
+  /// caller (the onboarding screen) so they can be shown; we deliberately do
+  /// NOT set the global `loading` flag here, which would swap the onboarding
+  /// screen for the splash and hide any error.
   Future<void> createCompany(Company c) async {
-    loading = true;
+    companyId = await repo.createCompany(c);
+    company = c;
+    ready = true;
+    loadBrief(); // populate the (empty) dashboard in the background
     notifyListeners();
-    try {
-      companyId = await repo.createCompany(c);
-      company = c;
-      ready = true;
-    } finally {
-      loading = false;
-      notifyListeners();
-    }
   }
 
   /// Generates the executive brief via the LLM, falling back to the offline

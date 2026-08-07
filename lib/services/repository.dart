@@ -1,9 +1,24 @@
+import 'dart:math';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/business.dart';
 import '../models/project_engine.dart';
 import '../models/work.dart';
 import 'ai_service.dart';
+
+/// RFC-4122 v4 UUID (so we can set ids client-side and avoid a post-insert
+/// read that RLS could block).
+String _uuidV4() {
+  final rnd = Random.secure();
+  final b = List<int>.generate(16, (_) => rnd.nextInt(256));
+  b[6] = (b[6] & 0x0f) | 0x40;
+  b[8] = (b[8] & 0x3f) | 0x80;
+  String h(int i) => b[i].toRadixString(16).padLeft(2, '0');
+  final s = List.generate(16, h).join();
+  return '${s.substring(0, 8)}-${s.substring(8, 12)}-${s.substring(12, 16)}-'
+      '${s.substring(16, 20)}-${s.substring(20)}';
+}
 
 const _priorities = {'critical', 'high', 'medium', 'low'};
 const _levels = {'low', 'medium', 'high'};
@@ -41,10 +56,15 @@ class CereontRepository {
   }
 
   /// Creates a company owned by the current user and returns its id.
+  /// The id is generated client-side so we don't need a post-insert read
+  /// (which RLS could reject before the owner-membership trigger is visible).
   Future<String> createCompany(Company c) async {
-    final map = c.toMap()..['owner_id'] = _uid;
-    final row = await _db.from('companies').insert(map).select('id').single();
-    return row['id'] as String;
+    final id = _uuidV4();
+    final map = c.toMap()
+      ..['id'] = id
+      ..['owner_id'] = _uid;
+    await _db.from('companies').insert(map);
+    return id;
   }
 
   Future<void> updateCompany(String companyId, Company c) async {
