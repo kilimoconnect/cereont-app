@@ -32,7 +32,7 @@ class AuthService {
       // Where the email-confirmation link returns the user. On web this
       // defaults to the project's Site URL; on mobile/desktop it deep-links
       // back into the app.
-      emailRedirectTo: kIsWeb ? null : SupabaseConfig.oauthCallback,
+      emailRedirectTo: kIsWeb ? Uri.base.origin : SupabaseConfig.oauthCallback,
       data: fullName == null || fullName.trim().isEmpty
           ? null
           : {'full_name': fullName.trim()},
@@ -54,7 +54,7 @@ class AuthService {
   Future<bool> signInWithGoogle() {
     return _auth.signInWithOAuth(
       OAuthProvider.google,
-      redirectTo: kIsWeb ? null : SupabaseConfig.oauthCallback,
+      redirectTo: kIsWeb ? Uri.base.origin : SupabaseConfig.oauthCallback,
       authScreenLaunchMode:
           kIsWeb ? LaunchMode.platformDefault : LaunchMode.externalApplication,
     );
@@ -71,7 +71,7 @@ class AuthService {
     return _auth.signInWithOAuth(
       OAuthProvider.google,
       scopes: 'https://www.googleapis.com/auth/gmail.readonly',
-      redirectTo: kIsWeb ? null : SupabaseConfig.oauthCallback,
+      redirectTo: kIsWeb ? Uri.base.origin : SupabaseConfig.oauthCallback,
       queryParams: const {'access_type': 'offline', 'prompt': 'consent'},
       authScreenLaunchMode:
           kIsWeb ? LaunchMode.platformDefault : LaunchMode.externalApplication,
