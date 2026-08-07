@@ -59,6 +59,15 @@ class CereontRepository {
   /// The id is generated client-side so we don't need a post-insert read
   /// (which RLS could reject before the owner-membership trigger is visible).
   Future<String> createCompany(Company c) async {
+    // Ensure the owner's profile row exists (companies.owner_id → profiles.id).
+    // Harmless if the signup trigger already created it.
+    final user = _db.auth.currentUser;
+    if (user != null) {
+      await _db.from('profiles').upsert(
+        {'id': user.id, 'email': user.email},
+        onConflict: 'id',
+      );
+    }
     final id = _uuidV4();
     final map = c.toMap()
       ..['id'] = id
