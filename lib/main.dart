@@ -36,6 +36,15 @@ class CereontApp extends StatelessWidget {
         theme: AppTheme.light,
         darkTheme: AppTheme.dark,
         themeMode: ThemeMode.dark,
+        // Tap anywhere outside a field to dismiss the keyboard (app-wide).
+        builder: (context, child) => GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: () {
+            final f = FocusManager.instance.primaryFocus;
+            if (f != null && f.hasFocus) f.unfocus();
+          },
+          child: child,
+        ),
         home: const AuthGate(),
       ),
     );

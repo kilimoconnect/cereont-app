@@ -30,10 +30,21 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        // Use a committed keystore so every build (incl. CI) is signed with the
+        // same key — release APKs then install over each other without an
+        // "update incompatible" signature error. Replace with a real upload key
+        // before publishing to the Play Store.
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
         }
     }

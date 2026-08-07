@@ -19,17 +19,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final _name = TextEditingController();
   final _industry = TextEditingController();
   final _tagline = TextEditingController();
-  String _currency = r'$';
+  final _currency = TextEditingController(text: r'$');
   bool _saving = false;
   String? _error;
-
-  static const _currencies = [r'$', '€', '£', '₦', 'KSh', '₹', 'R', 'د.إ'];
 
   @override
   void dispose() {
     _name.dispose();
     _industry.dispose();
     _tagline.dispose();
+    _currency.dispose();
     super.dispose();
   }
 
@@ -47,7 +46,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             productsServices: const [],
             departments: const [],
             goals: const [],
-            currency: _currency,
+            currency: _currency.text.trim().isEmpty
+                ? r'$'
+                : _currency.text.trim(),
           ));
     } catch (e) {
       setState(() => _error = 'Could not create your company. $e');
@@ -156,20 +157,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             maxLines: 2,
                           ),
                           const SizedBox(height: 18),
-                          Text('CURRENCY',
-                              style: _labelStyle(context)),
-                          const SizedBox(height: 8),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: _currencies
-                                .map((c) => ChoiceChip(
-                                      label: Text(c),
-                                      selected: _currency == c,
-                                      onSelected: (_) =>
-                                          setState(() => _currency = c),
-                                    ))
-                                .toList(),
+                          _Field(
+                            label: 'Currency',
+                            hint: r'e.g. $, KSh, ₦, €',
+                            controller: _currency,
+                            icon: Icons.payments_outlined,
                           ),
                         ],
                       ),
@@ -242,12 +234,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  static TextStyle _labelStyle(BuildContext context) => TextStyle(
-        fontSize: 11,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 0.8,
-        color: Theme.of(context).textTheme.bodySmall?.color,
-      );
 }
 
 /// A labeled text field with an icon — consistent, professional styling.
@@ -288,8 +274,18 @@ class _Field extends StatelessWidget {
           maxLines: maxLines,
           textCapitalization: textCapitalization,
           validator: validator,
+          textInputAction:
+              maxLines == 1 ? TextInputAction.next : TextInputAction.newline,
           decoration: InputDecoration(
             hintText: hint,
+            hintStyle: TextStyle(
+              color: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.color
+                  ?.withValues(alpha: 0.45),
+              fontWeight: FontWeight.w400,
+            ),
             prefixIcon: Icon(icon, size: 20),
             isDense: true,
           ),
