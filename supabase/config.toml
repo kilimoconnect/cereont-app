@@ -1,0 +1,11 @@
+# Supabase project config (used by the Supabase CLI).
+# The `ai` Edge Function requires a valid user JWT — the app sends it
+# automatically via functions.invoke.
+
+project_id = "cereont"
+
+[functions.ai]
+verify_jwt = true
+
+[functions.email-sync]
+verify_jwt = true
