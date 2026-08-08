@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/business.dart';
@@ -86,15 +87,9 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                   }),
                 ),
                 const SizedBox(height: 20),
-                _simpleListSection<ProjectResource>(
-                  context,
-                  title: 'Resources',
-                  items: detail?.resources ?? const [],
-                  icon: Icons.inventory_2_outlined,
-                  labelOf: (r) => r.name,
-                  subOf: (r) => '${r.kind}${r.detail.isEmpty ? '' : ' · ${r.detail}'}',
-                  onAdd: () => _addResource(context, state, p.id),
-                ),
+                _financials(context, state, p, detail),
+                const SizedBox(height: 20),
+                _resources(context, state, p, detail),
                 const SizedBox(height: 20),
                 _simpleListSection<ProjectDecision>(
                   context,
@@ -122,18 +117,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                   }),
                 ),
                 const SizedBox(height: 20),
-                _simpleListSection<ProjectUpdate>(
-                  context,
-                  title: 'Activity log',
-                  items: detail?.updates ?? const [],
-                  icon: Icons.history,
-                  labelOf: (u) => u.note,
-                  subOf: (u) => u.author,
-                  onAdd: () => _addText(context, 'Add an update', (v) {
-                    state.addProjectUpdate(
-                        p.id, ProjectUpdate(id: state.newId('upd'), note: v));
-                  }),
-                ),
+                _timeline(context, state, p, detail),
               ],
             ),
     );
@@ -616,11 +600,381 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
     );
   }
 
-  void _addResource(BuildContext context, AppState state, String pid) {
-    _addText(context, 'Add a resource', (v) {
+  // ---- Financials (P4) -------------------------------------------------
+  String _money(String cur, double v) =>
+      '$cur${NumberFormat.decimalPattern().format(v.round())}';
+
+  Widget _financials(BuildContext context, AppState state, Project p,
+      ProjectDetail? detail) {
+    final cur = state.company.currency;
+    final lines = detail?.budget ?? const <BudgetLine>[];
+    double sumOf(String t) =>
+        lines.where((b) => b.type == t).fold(0.0, (s, b) => s + b.amount);
+    final budget = p.budgetAmount ?? sumOf('budget');
+    final committed = sumOf('committed');
+    final spent = sumOf('expense');
+    final remaining = budget - spent;
+    final projected = spent + committed;
+    final overrun = budget > 0 && projected > budget;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionHeader('Financials',
+            action: 'Add', onAction: () => _addBudgetLine(context, state, p.id)),
+        if (budget == 0 && lines.isEmpty)
+          Text('No budget tracked yet.',
+              style: Theme.of(context).textTheme.bodySmall)
+        else
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                children: [
+                  Row(children: [
+                    _fin(context, 'Budget', _money(cur, budget)),
+                    _fin(context, 'Spent', _money(cur, spent)),
+                  ]),
+                  const SizedBox(height: 12),
+                  Row(children: [
+                    _fin(context, 'Committed', _money(cur, committed)),
+                    _fin(context, 'Remaining', _money(cur, remaining),
+                        color: remaining < 0 ? const Color(0xFFE5484D) : null),
+                  ]),
+                  const Divider(height: 24),
+                  Row(children: [
+                    const Text('Projected final cost',
+                        style: TextStyle(fontWeight: FontWeight.w600)),
+                    const Spacer(),
+                    Text(_money(cur, projected),
+                        style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            color: overrun ? const Color(0xFFE5484D) : null)),
+                  ]),
+                  if (overrun) ...[
+                    const SizedBox(height: 8),
+                    Row(children: [
+                      const Icon(Icons.warning_amber_outlined,
+                          size: 15, color: Color(0xFFE5484D)),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Projected to exceed budget by '
+                          '${_money(cur, projected - budget)}.',
+                          style: const TextStyle(
+                              fontSize: 12, color: Color(0xFFE5484D)),
+                        ),
+                      ),
+                    ]),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ...lines.map((b) => Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Card(
+                child: ListTile(
+                  dense: true,
+                  leading: Icon(
+                      b.type == 'funding'
+                          ? Icons.savings_outlined
+                          : Icons.receipt_long_outlined,
+                      color: AppColors.brand),
+                  title: Text(b.label),
+                  subtitle: Text(b.type),
+                  trailing: Text(_money(cur, b.amount),
+                      style: const TextStyle(fontWeight: FontWeight.w700)),
+                ),
+              ),
+            )),
+      ],
+    );
+  }
+
+  Widget _fin(BuildContext context, String label, String value, {Color? color}) {
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: Theme.of(context).textTheme.bodySmall),
+          const SizedBox(height: 2),
+          Text(value,
+              style: TextStyle(
+                  fontSize: 18, fontWeight: FontWeight.w800, color: color)),
+        ],
+      ),
+    );
+  }
+
+  // ---- Resources (P4) --------------------------------------------------
+  Widget _resources(BuildContext context, AppState state, Project p,
+      ProjectDetail? detail) {
+    final res = detail?.resources ?? const <ProjectResource>[];
+    const groups = {
+      'person': 'People',
+      'asset': 'Assets',
+      'skill': 'Skills',
+      'information': 'Information',
+    };
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionHeader('Resources',
+            action: 'Add',
+            onAction: () => _addResourceKind(context, state, p.id)),
+        if (res.isEmpty)
+          Text('No resources yet.',
+              style: Theme.of(context).textTheme.bodySmall)
+        else
+          ...groups.entries.expand((g) {
+            final items = res.where((r) => r.kind == g.key).toList();
+            if (items.isEmpty) return <Widget>[];
+            return [
+              Padding(
+                padding: const EdgeInsets.only(top: 8, bottom: 4),
+                child: Text(g.value.toUpperCase(),
+                    style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.6,
+                        color: Theme.of(context).textTheme.bodySmall?.color)),
+              ),
+              ...items.map((r) => Card(
+                    margin: const EdgeInsets.only(bottom: 6),
+                    child: ListTile(
+                      dense: true,
+                      leading: Icon(_resIcon(r.kind), color: AppColors.brand),
+                      title: Text(r.name),
+                      subtitle: r.detail.isEmpty ? null : Text(r.detail),
+                    ),
+                  )),
+            ];
+          }),
+      ],
+    );
+  }
+
+  IconData _resIcon(String kind) {
+    switch (kind) {
+      case 'person':
+        return Icons.person_outline;
+      case 'asset':
+        return Icons.inventory_2_outlined;
+      case 'skill':
+        return Icons.psychology_outlined;
+      default:
+        return Icons.description_outlined;
+    }
+  }
+
+  // ---- Timeline (P4) ---------------------------------------------------
+  Widget _timeline(BuildContext context, AppState state, Project p,
+      ProjectDetail? detail) {
+    final items = <_TLItem>[];
+    items.add(_TLItem(p.startDate ?? p.deadline, 'Project started',
+        Icons.flag_circle_outlined));
+    for (final m in detail?.milestones ?? const <Milestone>[]) {
+      if (m.dueDate != null) {
+        items.add(_TLItem(m.dueDate!, 'Milestone: ${m.title}',
+            Icons.flag_outlined));
+      }
+    }
+    for (final d in detail?.decisions ?? const <ProjectDecision>[]) {
+      if (d.decidedOn != null) {
+        items.add(_TLItem(d.decidedOn!, 'Decision: ${d.decision}',
+            Icons.gavel_outlined));
+      }
+    }
+    for (final u in detail?.updates ?? const <ProjectUpdate>[]) {
+      items.add(_TLItem(u.createdAt, u.note, Icons.history));
+    }
+    items.sort((a, b) => b.date.compareTo(a.date));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionHeader('Timeline',
+            action: 'Add note',
+            onAction: () => _addText(context, 'Add an update', (v) {
+                  state.addProjectUpdate(
+                      p.id, ProjectUpdate(id: state.newId('upd'), note: v));
+                })),
+        if (items.isEmpty)
+          Text('Nothing on the timeline yet.',
+              style: Theme.of(context).textTheme.bodySmall)
+        else
+          ...items.asMap().entries.map((e) => _tlRow(
+              context, e.value, e.key == items.length - 1)),
+      ],
+    );
+  }
+
+  Widget _tlRow(BuildContext context, _TLItem it, bool last) {
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Column(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: AppColors.brand.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(it.icon, size: 16, color: AppColors.brand),
+              ),
+              if (!last)
+                Expanded(
+                    child: Container(
+                        width: 2, color: Theme.of(context).dividerColor)),
+            ],
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(DateFormat('MMM d, y').format(it.date),
+                      style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.brand)),
+                  const SizedBox(height: 2),
+                  Text(it.title, style: const TextStyle(height: 1.3)),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ---- Add dialogs (P4) ------------------------------------------------
+  Future<void> _addBudgetLine(
+      BuildContext context, AppState state, String pid) async {
+    final label = TextEditingController();
+    final amount = TextEditingController();
+    var type = 'expense';
+    const types = ['budget', 'committed', 'expense', 'funding'];
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setD) => AlertDialog(
+          title: const Text('Add budget entry'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                  controller: label,
+                  decoration: const InputDecoration(labelText: 'Label')),
+              const SizedBox(height: 10),
+              TextField(
+                  controller: amount,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Amount')),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 6,
+                children: types
+                    .map((t) => ChoiceChip(
+                          label: Text(t),
+                          selected: type == t,
+                          onSelected: (_) => setD(() => type = t),
+                        ))
+                    .toList(),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel')),
+            FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Add')),
+          ],
+        ),
+      ),
+    );
+    if (ok == true && label.text.trim().isNotEmpty) {
+      state.addBudgetLine(
+          pid,
+          BudgetLine(
+            id: state.newId('bud'),
+            label: label.text.trim(),
+            amount: double.tryParse(amount.text.trim()) ?? 0,
+            type: type,
+          ));
+    }
+  }
+
+  Future<void> _addResourceKind(
+      BuildContext context, AppState state, String pid) async {
+    final name = TextEditingController();
+    final detail = TextEditingController();
+    var kind = 'person';
+    const kinds = {
+      'person': 'Person',
+      'asset': 'Asset',
+      'skill': 'Skill',
+      'information': 'Information',
+    };
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setD) => AlertDialog(
+          title: const Text('Add resource'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                  controller: name,
+                  decoration: const InputDecoration(labelText: 'Name')),
+              const SizedBox(height: 10),
+              TextField(
+                  controller: detail,
+                  decoration:
+                      const InputDecoration(labelText: 'Detail (optional)')),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 6,
+                children: kinds.entries
+                    .map((k) => ChoiceChip(
+                          label: Text(k.value),
+                          selected: kind == k.key,
+                          onSelected: (_) => setD(() => kind = k.key),
+                        ))
+                    .toList(),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel')),
+            FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Add')),
+          ],
+        ),
+      ),
+    );
+    if (ok == true && name.text.trim().isNotEmpty) {
       state.addProjectResource(
-          pid, ProjectResource(id: state.newId('res'), name: v));
-    });
+          pid,
+          ProjectResource(
+            id: state.newId('res'),
+            kind: kind,
+            name: name.text.trim(),
+            detail: detail.text.trim(),
+          ));
+    }
   }
 
   Future<void> _addText(
@@ -648,4 +1002,11 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
     );
     if (result != null && result.trim().isNotEmpty) onSubmit(result.trim());
   }
+}
+
+class _TLItem {
+  final DateTime date;
+  final String title;
+  final IconData icon;
+  _TLItem(this.date, this.title, this.icon);
 }
