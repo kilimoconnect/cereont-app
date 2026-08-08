@@ -150,6 +150,17 @@ class CereontRepository {
     return rows.map((e) => Meeting.fromMap(e)).toList();
   }
 
+  /// All lessons across the company's projects (business memory).
+  Future<List<ProjectLesson>> fetchLessons(String cid) async {
+    final rows = await _db
+        .from('project_lessons')
+        .select()
+        .eq('company_id', cid)
+        .order('created_at', ascending: false)
+        .limit(50);
+    return rows.map((e) => ProjectLesson.fromMap(e)).toList();
+  }
+
   Future<List<Note>> fetchNotes(String cid) async {
     final rows = await _db
         .from('notes')

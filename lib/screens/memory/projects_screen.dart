@@ -146,6 +146,11 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
               children: [
                 if (_filter != _Filter.archived) _PortfolioSummary(state: state),
+                if (_filter == _Filter.all) ...[
+                  const SizedBox(height: 12),
+                  _PortfolioIntelligence(state: state),
+                  _BusinessMemory(state: state),
+                ],
                 const SizedBox(height: 8),
                 if (projects.isEmpty)
                   const Padding(
@@ -405,5 +410,139 @@ class _ProjectCard extends StatelessWidget {
       default:
         return const Color(0xFFF5A524);
     }
+  }
+}
+
+/// Cross-project intelligence: conflicts, overloads and clustered deadlines.
+class _PortfolioIntelligence extends StatelessWidget {
+  final AppState state;
+  const _PortfolioIntelligence({required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    final live = state.liveProjects;
+    if (live.isEmpty) return const SizedBox.shrink();
+
+    bool terminal(Project p) =>
+        ['Done', 'Completed', 'Cancelled', 'Failed'].contains(p.status);
+    final insights = <String>[];
+
+    final critical = live.where((p) => state.quickHealth(p) < 50).length;
+    if (critical >= 2) {
+      insights.add('$critical projects are critical and competing for attention.');
+    }
+    final counts = <String, int>{};
+    for (final p in live.where((p) => !terminal(p) && p.status != 'Planning')) {
+      for (final m in p.team) {
+        counts[m] = (counts[m] ?? 0) + 1;
+      }
+    }
+    counts.forEach((name, c) {
+      if (c >= 3) {
+        insights.add('$name is on $c active projects — possible overload.');
+      }
+    });
+    final soon = live
+        .where((p) =>
+            !terminal(p) && p.daysToDeadline >= 0 && p.daysToDeadline <= 14)
+        .length;
+    if (soon >= 2) insights.add('$soon projects are due within two weeks.');
+    final atRisk = live.where((p) => p.status == 'At risk').length;
+    if (atRisk > 0) insights.add('$atRisk project(s) flagged at risk.');
+    if (insights.isEmpty) {
+      insights.add('No portfolio conflicts detected — capacity looks balanced.');
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.brand.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.brand.withValues(alpha: 0.22)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: const [
+              Icon(Icons.hub_outlined, size: 16, color: AppColors.brand),
+              SizedBox(width: 6),
+              Text('Portfolio intelligence',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w700, color: AppColors.brand)),
+            ]),
+            const SizedBox(height: 10),
+            ...insights.map((i) => Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Padding(
+                        padding: EdgeInsets.only(top: 6, right: 8),
+                        child: Icon(Icons.circle,
+                            size: 5, color: AppColors.brand),
+                      ),
+                      Expanded(
+                          child: Text(i,
+                              style: const TextStyle(height: 1.35))),
+                    ],
+                  ),
+                )),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Business memory: lessons learned across past projects.
+class _BusinessMemory extends StatelessWidget {
+  final AppState state;
+  const _BusinessMemory({required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    final lessons = state.companyLessons;
+    if (lessons.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Icon(Icons.school_outlined,
+                    size: 16,
+                    color: Theme.of(context).textTheme.bodySmall?.color),
+                const SizedBox(width: 6),
+                const Text('Business memory · what we’ve learned',
+                    style: TextStyle(fontWeight: FontWeight.w700)),
+              ]),
+              const SizedBox(height: 10),
+              ...lessons.take(4).map((l) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (l.category.isNotEmpty)
+                          Text(l.category.toUpperCase(),
+                              style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.5,
+                                  color: AppColors.brand)),
+                        Text(l.lesson,
+                            style: const TextStyle(height: 1.3)),
+                      ],
+                    ),
+                  )),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

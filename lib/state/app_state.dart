@@ -39,6 +39,7 @@ class AppState extends ChangeNotifier {
   final List<Meeting> meetings = [];
   final List<Note> notes = [];
   final List<TimelineEvent> timeline = [];
+  final List<ProjectLesson> companyLessons = []; // business memory
   final List<ChatMessage> chat = [];
 
   late final AiEngine ai = AiEngine(this);
@@ -101,6 +102,7 @@ class AppState extends ChangeNotifier {
       repo.fetchMeetings(cid),
       repo.fetchNotes(cid),
       repo.fetchTimeline(cid),
+      repo.fetchLessons(cid),
     ]);
     _replace(customers, results[0] as List<Customer>);
     _replace(suppliers, results[1] as List<Supplier>);
@@ -112,6 +114,7 @@ class AppState extends ChangeNotifier {
     _replace(meetings, results[7] as List<Meeting>);
     _replace(notes, results[8] as List<Note>);
     _replace(timeline, results[9] as List<TimelineEvent>);
+    _replace(companyLessons, results[10] as List<ProjectLesson>);
     ready = true;
   }
 
@@ -146,6 +149,7 @@ class AppState extends ChangeNotifier {
       meetings,
       notes,
       timeline,
+      companyLessons,
       chat,
     ]) {
       l.clear();
@@ -532,6 +536,7 @@ class AppState extends ChangeNotifier {
 
   void addProjectLesson(String projectId, ProjectLesson l) {
     currentDetail?.lessons.insert(0, l);
+    companyLessons.insert(0, l); // feed business memory
     notifyListeners();
     if (companyId != null) _persist(() => repo.addLesson(companyId!, projectId, l));
   }

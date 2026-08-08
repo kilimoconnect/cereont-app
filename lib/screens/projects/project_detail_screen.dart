@@ -48,6 +48,22 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(p.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+        actions: [
+          PopupMenuButton<String>(
+            tooltip: 'Status & outcome',
+            icon: const Icon(Icons.more_vert),
+            onSelected: (s) => _setOutcome(context, state, p, s),
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'On track', child: Text('Mark on track')),
+              PopupMenuItem(value: 'At risk', child: Text('Mark at risk')),
+              PopupMenuDivider(),
+              PopupMenuItem(value: 'Completed', child: Text('Complete ✓')),
+              PopupMenuItem(value: 'Paused', child: Text('Pause')),
+              PopupMenuItem(value: 'Cancelled', child: Text('Cancel')),
+              PopupMenuItem(value: 'Failed', child: Text('Mark failed')),
+            ],
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => Navigator.of(context).push(MaterialPageRoute(
@@ -61,6 +77,10 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
           : ListView(
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 96),
               children: [
+                if (['Completed', 'Cancelled', 'Failed'].contains(p.status)) ...[
+                  _completionCard(context, state, p, detail),
+                  const SizedBox(height: 16),
+                ],
                 _earlyWarningBanner(context, state, p, detail, projTasks),
                 _healthCard(context, p, health),
                 const SizedBox(height: 16),
@@ -354,6 +374,158 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
         ],
       ),
     );
+  }
+
+  // ---- Completion + lessons (P7) ---------------------------------------
+  void _setOutcome(
+      BuildContext context, AppState state, Project p, String status) {
+    p.status = status;
+    if (status == 'Completed') p.progress = 1.0;
+    state.updateProject(p);
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('Project marked "$status".')));
+    if (['Completed', 'Cancelled', 'Failed'].contains(status)) {
+      _captureLessons(context, state, p.id);
+    }
+  }
+
+  Widget _completionCard(BuildContext context, AppState state, Project p,
+      ProjectDetail? detail) {
+    final lines = detail?.budget ?? const <BudgetLine>[];
+    double sumOf(String t) =>
+        lines.where((b) => b.type == t).fold(0.0, (s, b) => s + b.amount);
+    final budget = p.budgetAmount ?? sumOf('budget');
+    final spent = sumOf('expense');
+    final budgetVar =
+        budget > 0 ? ((spent - budget) / budget * 100).round() : null;
+    final days = p.daysToDeadline;
+    final color = p.status == 'Completed'
+        ? const Color(0xFF30A46C)
+        : p.status == 'Failed'
+            ? const Color(0xFFE5484D)
+            : const Color(0xFFF5A524);
+    final icon = p.status == 'Completed'
+        ? Icons.check_circle
+        : p.status == 'Failed'
+            ? Icons.cancel
+            : Icons.stop_circle;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Icon(icon, color: color, size: 20),
+            const SizedBox(width: 8),
+            Text('Outcome: ${p.status}',
+                style: TextStyle(
+                    fontWeight: FontWeight.w800, fontSize: 16, color: color)),
+          ]),
+          if (p.objective.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(p.objective, style: const TextStyle(height: 1.4)),
+          ],
+          const SizedBox(height: 12),
+          Row(children: [
+            _cv(context, 'Budget',
+                budgetVar == null ? '—' : '${budgetVar > 0 ? '+' : ''}$budgetVar%'),
+            _cv(context, 'Timeline',
+                days < 0 ? '${-days}d late' : '${days}d to spare'),
+            _cv(context, 'Metrics', '${p.successMetrics.length}'),
+          ]),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: () => _captureLessons(context, state, p.id),
+            icon: const Icon(Icons.school_outlined, size: 18),
+            label: const Text('Capture lessons'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _cv(BuildContext context, String label, String value) {
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(value,
+              style:
+                  const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+          Text(label, style: Theme.of(context).textTheme.bodySmall),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _captureLessons(
+      BuildContext context, AppState state, String pid) async {
+    final worked = TextEditingController();
+    final failed = TextEditingController();
+    final surprised = TextEditingController();
+    final repeat = TextEditingController();
+    final avoid = TextEditingController();
+    final prompts = <(TextEditingController, String)>[
+      (worked, 'What worked?'),
+      (failed, 'What failed?'),
+      (surprised, 'What surprised you?'),
+      (repeat, 'What to repeat?'),
+      (avoid, 'What to avoid?'),
+    ];
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Lessons learned'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final (c, label) in prompts)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: TextField(
+                    controller: c,
+                    decoration: InputDecoration(labelText: label),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Save')),
+        ],
+      ),
+    );
+    if (ok == true) {
+      var n = 0;
+      for (final (c, label) in prompts) {
+        final v = c.text.trim();
+        if (v.isNotEmpty) {
+          state.addProjectLesson(
+              pid,
+              ProjectLesson(
+                  id: state.newId('les'),
+                  lesson: v,
+                  category: label.replaceAll('?', '')));
+          n++;
+        }
+      }
+      if (context.mounted && n > 0) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('$n lesson(s) saved to business memory.')));
+      }
+    }
   }
 
   // ---- Early warning (P5) ----------------------------------------------
