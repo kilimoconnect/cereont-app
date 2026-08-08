@@ -262,6 +262,13 @@ class AppState extends ChangeNotifier {
   List<Note> notesMentioning(String name) =>
       notes.where((n) => _mentions('${n.title} ${n.body}', name)).toList();
 
+  List<EmailItem> emailsMentioning(String name) => emails
+      .where((e) => _mentions('${e.subject} ${e.body} ${e.aiSummary}', name))
+      .toList();
+
+  List<Meeting> meetingsForProject(String projectId) =>
+      meetings.where((m) => m.projectId == projectId).toList();
+
   // ---- Task mutations --------------------------------------------------
   void toggleTask(Task t) {
     t.status = t.isDone ? TaskStatus.open : TaskStatus.done;
@@ -387,6 +394,42 @@ class AppState extends ChangeNotifier {
     _replace(tasks, await repo.fetchTasks(companyId!));
     notifyListeners();
     return saved;
+  }
+
+  /// Captures a meeting into a project: stores it, and feeds the project with
+  /// tasks (from action items) and decisions.
+  void addProjectMeeting(String projectId, ParsedMeeting r) {
+    final m = Meeting(
+      id: newId('mt'),
+      title: r.title,
+      date: DateTime.now(),
+      attendees: const ['You'],
+      summary: r.summary,
+      decisions: r.decisions,
+      actionItems: r.actions.map((a) => ActionItem(a)).toList(),
+      projectId: projectId,
+    );
+    meetings.insert(0, m);
+    for (final a in r.actions) {
+      addTask(Task(
+        id: newId('t'),
+        title: a,
+        source: 'Meeting',
+        relatedProjectId: projectId,
+      ));
+    }
+    for (final d in r.decisions) {
+      addProjectDecision(
+          projectId, ProjectDecision(id: newId('dec'), decision: d));
+    }
+    notifyListeners();
+    if (companyId != null) {
+      _persist(() async {
+        final saved = await repo.insertMeeting(companyId!, m);
+        _swap(meetings, m.id, saved, (x) => x.id);
+        notifyListeners();
+      });
+    }
   }
 
   void setAssumptionStatus(ProjectAssumption a, String status) {

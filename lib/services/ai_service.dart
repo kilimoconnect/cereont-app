@@ -184,6 +184,26 @@ class AiService {
     throw Exception('No analysis');
   }
 
+  /// Extracts summary + actionable tasks + risks from document text.
+  Future<DocExtract> extractDocument(String text) async {
+    final res = await Supabase.instance.client.functions.invoke('ai', body: {
+      'action': 'extract_document',
+      'text': text,
+    });
+    final d = res.data;
+    if (d is Map && d['doc'] is Map) {
+      final m = Map<String, dynamic>.from(d['doc'] as Map);
+      List<String> l(dynamic v) =>
+          v is List ? v.map((e) => e.toString()).toList() : const <String>[];
+      return DocExtract(
+        summary: (m['summary'] ?? '').toString(),
+        tasks: l(m['tasks']),
+        risks: l(m['risks']),
+      );
+    }
+    throw Exception('No document extraction');
+  }
+
   /// Scenario planning: 3 what-if comparisons (markdown text).
   Future<String> scenarios({required Map<String, dynamic> project}) async {
     final res = await Supabase.instance.client.functions.invoke('ai', body: {
@@ -202,6 +222,14 @@ class ParsedTask {
   final DateTime? due;
   final String priority;
   const ParsedTask({required this.title, this.due, required this.priority});
+}
+
+class DocExtract {
+  final String summary;
+  final List<String> tasks;
+  final List<String> risks;
+  const DocExtract(
+      {required this.summary, required this.tasks, required this.risks});
 }
 
 class DiscoverResult {

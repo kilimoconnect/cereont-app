@@ -214,6 +214,7 @@ class Meeting {
   List<String> decisions;
   List<ActionItem> actionItems;
   bool processed;
+  String? projectId;
 
   Meeting({
     required this.id,
@@ -224,6 +225,7 @@ class Meeting {
     this.decisions = const [],
     this.actionItems = const [],
     this.processed = false,
+    this.projectId,
   });
 
   factory Meeting.fromMap(Map<String, dynamic> m) => Meeting(
@@ -237,6 +239,7 @@ class Meeting {
             .map((e) => ActionItem.fromMap(Map<String, dynamic>.from(e as Map)))
             .toList(),
         processed: m['processed'] as bool? ?? false,
+        projectId: m['project_id'] as String?,
       );
 
   Map<String, dynamic> toMap() => {
@@ -247,6 +250,7 @@ class Meeting {
         'decisions': decisions,
         'action_items': actionItems.map((a) => a.toMap()).toList(),
         'processed': processed,
+        'project_id': projectId,
       };
 }
 

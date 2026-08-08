@@ -258,6 +258,23 @@ Deno.serve(async (req) => {
       return json({ analysis: text, provider });
     }
 
+    if (action === "extract_document") {
+      const text: string = (body.text ?? "").toString();
+      if (!text.trim()) return json({ error: "text required" }, 400);
+      const system =
+        "Extract the actionable essence of this business document (contract, " +
+        "quotation, proposal, plan). Return STRICT JSON: " +
+        '{"summary":"<2-3 sentences>",' +
+        '"tasks":["<obligation, deadline or requirement as an actionable task>"],' +
+        '"risks":["<risk or red flag>"]}. Be concise and specific.';
+      const messages: Msg[] = [
+        { role: "system", content: system },
+        { role: "user", content: text.slice(0, 8000) },
+      ];
+      const { text: out, provider } = await generate(messages, true);
+      return json({ doc: parseJson(out), provider });
+    }
+
     // Default: conversational chat.
     const message: string = (body.message ?? "").toString();
     if (!message.trim()) return json({ error: "Empty message" }, 400);

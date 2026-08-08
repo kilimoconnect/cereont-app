@@ -97,6 +97,12 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 const SizedBox(height: 20),
                 _resources(context, state, p, detail),
                 const SizedBox(height: 20),
+                _meetings(context, state, p),
+                const SizedBox(height: 20),
+                _relatedEmails(context, state, p),
+                const SizedBox(height: 20),
+                _documents(context, state, p),
+                const SizedBox(height: 20),
                 _simpleListSection<ProjectDecision>(
                   context,
                   title: 'Decisions',
@@ -1142,6 +1148,217 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
         ],
       ),
     );
+  }
+
+  // ---- Feeds: meetings / emails / documents (P6) -----------------------
+  Widget _meetings(BuildContext context, AppState state, Project p) {
+    final ms = state.meetingsForProject(p.id);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionHeader('Meetings',
+            action: 'Capture',
+            onAction: () => _captureProjectMeeting(context, state, p.id)),
+        if (ms.isEmpty)
+          Text('No meetings linked yet.',
+              style: Theme.of(context).textTheme.bodySmall)
+        else
+          ...ms.map((m) => Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  leading: const Icon(Icons.record_voice_over_outlined,
+                      color: AppColors.brand),
+                  title: Text(m.title),
+                  subtitle: Text(
+                      '${DateFormat('MMM d').format(m.date)} · '
+                      '${m.decisions.length} decision(s), ${m.actionItems.length} action(s)'),
+                ),
+              )),
+      ],
+    );
+  }
+
+  Widget _relatedEmails(BuildContext context, AppState state, Project p) {
+    final es = state.emailsMentioning(p.name);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionHeader('Related emails'),
+        if (es.isEmpty)
+          Text('No project emails detected. Sync Gmail to surface them.',
+              style: Theme.of(context).textTheme.bodySmall)
+        else
+          ...es.take(6).map((e) => Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  leading: Icon(e.kind.icon, color: AppColors.brand),
+                  title: Text(e.subject,
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                  subtitle: Text(e.aiSummary,
+                      maxLines: 2, overflow: TextOverflow.ellipsis),
+                ),
+              )),
+      ],
+    );
+  }
+
+  Widget _documents(BuildContext context, AppState state, Project p) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionHeader('Documents',
+            action: 'Add from text',
+            onAction: () => _extractDocument(context, state, p.id)),
+        Text(
+          'Paste a contract, quotation or proposal — Cereont extracts tasks and '
+          'risks and adds them here. (File upload coming soon.)',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      ],
+    );
+  }
+
+  Future<void> _captureProjectMeeting(
+      BuildContext context, AppState state, String pid) async {
+    final controller = TextEditingController();
+    final text = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Capture meeting'),
+        content: TextField(
+          controller: controller,
+          maxLines: 6,
+          autofocus: true,
+          decoration:
+              const InputDecoration(hintText: 'Paste transcript or notes…'),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, controller.text),
+              child: const Text('Process')),
+        ],
+      ),
+    );
+    if (text == null || text.trim().isEmpty || !context.mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(const SnackBar(content: Text('Processing meeting…')));
+    try {
+      final r = await AiService().meeting(text.trim());
+      state.addProjectMeeting(pid, r);
+      messenger.showSnackBar(SnackBar(
+          content: Text(
+              'Captured: ${r.actions.length} task(s), ${r.decisions.length} decision(s)')));
+    } catch (_) {
+      state.addProjectMeeting(
+          pid,
+          ParsedMeeting(
+              title: 'Captured meeting',
+              summary: text.trim(),
+              decisions: const [],
+              actions: const []));
+      messenger.showSnackBar(
+          const SnackBar(content: Text('Saved notes (AI unavailable)')));
+    }
+  }
+
+  Future<void> _extractDocument(
+      BuildContext context, AppState state, String pid) async {
+    final controller = TextEditingController();
+    final text = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Add document'),
+        content: TextField(
+          controller: controller,
+          maxLines: 6,
+          autofocus: true,
+          decoration: const InputDecoration(
+              hintText: 'Paste the document text (contract, quote, proposal)…'),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, controller.text),
+              child: const Text('Extract')),
+        ],
+      ),
+    );
+    if (text == null || text.trim().isEmpty || !context.mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(const SnackBar(content: Text('Reading document…')));
+    DocExtract? doc;
+    try {
+      doc = await AiService().extractDocument(text.trim());
+    } catch (_) {}
+    if (!context.mounted) return;
+    if (doc == null) {
+      messenger.showSnackBar(const SnackBar(
+          content: Text('AI unavailable — deploy the ai function.')));
+      return;
+    }
+    final d = doc;
+    final add = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Document extracted'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (d.summary.isNotEmpty)
+                Text(d.summary, style: const TextStyle(height: 1.4)),
+              if (d.tasks.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Text('${d.tasks.length} task(s)',
+                    style: const TextStyle(fontWeight: FontWeight.w700)),
+                ...d.tasks.map((t) => Text('• $t')),
+              ],
+              if (d.risks.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Text('${d.risks.length} risk(s)',
+                    style: const TextStyle(fontWeight: FontWeight.w700)),
+                ...d.risks.map((r) => Text('• $r')),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Close')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Add to project')),
+        ],
+      ),
+    );
+    if (add == true) {
+      for (final t in d.tasks) {
+        state.addTask(Task(
+            id: state.newId('t'),
+            title: t,
+            source: 'Document',
+            relatedProjectId: pid));
+      }
+      for (final r in d.risks) {
+        state.addProjectRisk(
+            pid, ProjectRisk(id: state.newId('rsk'), title: r));
+      }
+      state.addProjectUpdate(
+          pid,
+          ProjectUpdate(
+              id: state.newId('upd'),
+              note: 'Document processed: ${d.summary}'));
+      messenger.showSnackBar(SnackBar(
+          content: Text(
+              'Added ${d.tasks.length} task(s), ${d.risks.length} risk(s)')));
+    }
   }
 
   // ---- Add dialogs (P4) ------------------------------------------------
