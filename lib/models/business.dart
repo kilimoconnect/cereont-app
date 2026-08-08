@@ -238,6 +238,9 @@ class Project {
   int? healthScore;
   double? budgetAmount;
   bool archived;
+  List<String> successMetrics;
+  List<String> scopeIncluded;
+  List<String> scopeExcluded;
 
   Project({
     required this.id,
@@ -257,6 +260,9 @@ class Project {
     this.healthScore,
     this.budgetAmount,
     this.archived = false,
+    this.successMetrics = const [],
+    this.scopeIncluded = const [],
+    this.scopeExcluded = const [],
   });
 
   int get daysToDeadline => deadline.difference(DateTime.now()).inDays;
@@ -283,6 +289,9 @@ class Project {
         budgetAmount:
             m['budget_amount'] == null ? null : toDouble(m['budget_amount']),
         archived: m['archived'] as bool? ?? false,
+        successMetrics: strList(m['success_metrics']),
+        scopeIncluded: strList(m['scope_included']),
+        scopeExcluded: strList(m['scope_excluded']),
       );
 
   Map<String, dynamic> toMap() => {
@@ -302,6 +311,9 @@ class Project {
         'objective': objective,
         if (budgetAmount != null) 'budget_amount': budgetAmount,
         'archived': archived,
+        'success_metrics': successMetrics,
+        'scope_included': scopeIncluded,
+        'scope_excluded': scopeExcluded,
       };
 }
 

@@ -71,6 +71,19 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 const SizedBox(height: 20),
                 _risks(context, state, p, detail),
                 const SizedBox(height: 20),
+                _simpleListSection<ProjectAssumption>(
+                  context,
+                  title: 'Assumptions',
+                  items: detail?.assumptions ?? const [],
+                  icon: Icons.help_outline,
+                  labelOf: (a) => a.statement,
+                  subOf: (a) => '${a.confidence}% confidence · ${a.status}',
+                  onAdd: () => _addText(context, 'Add an assumption', (v) {
+                    state.addProjectAssumption(p.id,
+                        ProjectAssumption(id: state.newId('asm'), statement: v));
+                  }),
+                ),
+                const SizedBox(height: 20),
                 _simpleListSection<ProjectResource>(
                   context,
                   title: 'Resources',

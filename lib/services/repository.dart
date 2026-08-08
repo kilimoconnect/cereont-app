@@ -270,6 +270,7 @@ class CereontRepository {
       _db.from('project_decisions').select().eq('project_id', pid).order('created_at', ascending: false),
       _db.from('project_lessons').select().eq('project_id', pid).order('created_at', ascending: false),
       _db.from('project_updates').select().eq('project_id', pid).order('created_at', ascending: false),
+      _db.from('project_assumptions').select().eq('project_id', pid).order('confidence'),
     ]);
     return ProjectDetail(
       milestones: (r[0]).map(Milestone.fromMap).toList(),
@@ -279,8 +280,74 @@ class CereontRepository {
       decisions: (r[4]).map(ProjectDecision.fromMap).toList(),
       lessons: (r[5]).map(ProjectLesson.fromMap).toList(),
       updates: (r[6]).map(ProjectUpdate.fromMap).toList(),
+      assumptions: (r[7]).map(ProjectAssumption.fromMap).toList(),
     );
   }
+
+  /// Creates a project from a full AI blueprint (understanding already applied
+  /// to [base]) plus milestones, tasks, risks and assumptions.
+  Future<Project> createProjectWithBlueprint(
+      String cid, Project base, ProjectBlueprint bp) async {
+    final row = await _db
+        .from('projects')
+        .insert(base.toMap()..['company_id'] = cid..['owner_id'] = _uid)
+        .select()
+        .single();
+    final project = Project.fromMap(row);
+
+    var order = 0;
+    for (final ms in bp.milestones) {
+      final mrow = await _db.from('project_milestones').insert({
+        'company_id': cid,
+        'project_id': project.id,
+        'title': ms.title,
+        'order_index': order++,
+        'status': 'pending',
+      }).select('id').single();
+      final mid = mrow['id'] as String;
+      for (final t in ms.tasks) {
+        await _db.from('tasks').insert({
+          'company_id': cid,
+          'title': t.title,
+          'priority': _prio(t.priority),
+          'status': 'open',
+          'source': 'AI',
+          'related_project_id': project.id,
+          'milestone_id': mid,
+          'created_by': _uid,
+        });
+      }
+    }
+    for (final r in bp.risks) {
+      await _db.from('project_risks').insert({
+        'company_id': cid,
+        'project_id': project.id,
+        'title': r.title,
+        'probability': _lvl(r.probability),
+        'impact': _lvl(r.impact),
+        'mitigation': r.mitigation,
+        'status': 'open',
+      });
+    }
+    for (final a in bp.assumptions) {
+      await _db.from('project_assumptions').insert({
+        'company_id': cid,
+        'project_id': project.id,
+        'statement': a.statement,
+        'confidence': a.confidence.clamp(0, 100),
+        'status': 'holding',
+      });
+    }
+    return project;
+  }
+
+  Future<void> updateAssumption(ProjectAssumption a) =>
+      _db.from('project_assumptions').update(a.toMap()).eq('id', a.id);
+
+  Future<ProjectAssumption> addAssumption(
+          String cid, String pid, ProjectAssumption a) =>
+      _insertChild('project_assumptions', cid, pid, a.toMap(),
+          ProjectAssumption.fromMap);
 
   Future<void> updateMilestone(Milestone m) =>
       _db.from('project_milestones').update(m.toMap()).eq('id', m.id);

@@ -371,6 +371,35 @@ class AppState extends ChangeNotifier {
     return saved;
   }
 
+  /// Creates a project from a full AI blueprint.
+  Future<Project> createBlueprintProject(
+      Project base, ProjectBlueprint bp) async {
+    final saved = await repo.createProjectWithBlueprint(companyId!, base, bp);
+    projects.insert(0, saved);
+    _replace(tasks, await repo.fetchTasks(companyId!));
+    notifyListeners();
+    return saved;
+  }
+
+  void setAssumptionStatus(ProjectAssumption a, String status) {
+    a.status = status;
+    notifyListeners();
+    if (companyId != null) _persist(() => repo.updateAssumption(a));
+  }
+
+  void addProjectAssumption(String projectId, ProjectAssumption a) {
+    currentDetail?.assumptions.add(a);
+    notifyListeners();
+    if (companyId != null) {
+      _persist(() async {
+        final saved = await repo.addAssumption(companyId!, projectId, a);
+        final list = currentDetail?.assumptions;
+        if (list != null) _swap(list, a.id, saved, (x) => x.id);
+        notifyListeners();
+      });
+    }
+  }
+
   Future<void> loadProjectDetail(String projectId, {bool force = false}) async {
     if (detailLoading) return;
     if (detailProjectId == projectId && currentDetail != null && !force) return;
@@ -383,7 +412,7 @@ class AppState extends ChangeNotifier {
     } catch (_) {
       currentDetail = ProjectDetail(
         milestones: [], risks: [], resources: [], budget: [],
-        decisions: [], lessons: [], updates: [],
+        decisions: [], lessons: [], updates: [], assumptions: [],
       );
     }
     detailLoading = false;

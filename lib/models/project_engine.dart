@@ -188,6 +188,31 @@ class ProjectUpdate {
   Map<String, dynamic> toMap() => {'note': note, 'author': author};
 }
 
+class ProjectAssumption {
+  final String id;
+  String statement;
+  int confidence; // 0..100
+  String status; // holding / at_risk / broken
+
+  ProjectAssumption({
+    required this.id,
+    required this.statement,
+    this.confidence = 70,
+    this.status = 'holding',
+  });
+
+  factory ProjectAssumption.fromMap(Map<String, dynamic> m) =>
+      ProjectAssumption(
+        id: m['id'] as String,
+        statement: m['statement'] as String? ?? '',
+        confidence: toInt(m['confidence'], 70),
+        status: m['status'] as String? ?? 'holding',
+      );
+
+  Map<String, dynamic> toMap() =>
+      {'statement': statement, 'confidence': confidence, 'status': status};
+}
+
 /// A whole project loaded with its children — used by the detail screen.
 class ProjectDetail {
   final List<Milestone> milestones;
@@ -197,6 +222,7 @@ class ProjectDetail {
   final List<ProjectDecision> decisions;
   final List<ProjectLesson> lessons;
   final List<ProjectUpdate> updates;
+  final List<ProjectAssumption> assumptions;
 
   const ProjectDetail({
     this.milestones = const [],
@@ -206,5 +232,6 @@ class ProjectDetail {
     this.decisions = const [],
     this.lessons = const [],
     this.updates = const [],
+    this.assumptions = const [],
   });
 }

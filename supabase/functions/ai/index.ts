@@ -133,6 +133,76 @@ Deno.serve(async (req) => {
       return json({ plan, provider });
     }
 
+    if (action === "discover") {
+      const idea: string = (body.idea ?? "").toString();
+      if (!idea.trim()) return json({ error: "Idea required" }, 400);
+      const history: { q: string; a: string }[] = Array.isArray(body.history)
+        ? body.history
+        : [];
+      const qa = history
+        .map((h, i) => `Q${i + 1}: ${h.q}\nA${i + 1}: ${h.a}`)
+        .join("\n");
+      const system =
+        "You are Cereont's project discovery interviewer. Decide if you have " +
+        "enough to build a solid project plan for the user's idea. If not, ask " +
+        "the ONE most important still-unknown, relevant question. Cover objective, " +
+        "scope, target, location, timeline, budget, resources, constraints, " +
+        "success criteria and risks — but only ask what's missing and matters. " +
+        "Ask at most ~6 questions total; stop early when you have enough. " +
+        'STRICT JSON only: {"done": boolean, "question": string}. ' +
+        "When done is true, question may be an empty string.\n\n" +
+        "BUSINESS CONTEXT (JSON):\n" + context;
+      const messages: Msg[] = [
+        { role: "system", content: system },
+        {
+          role: "user",
+          content: `Idea: ${idea}\n\nAnswers so far:\n${qa || "(none yet)"}` +
+            `\n\nWhat is the single next question — or are you done?`,
+        },
+      ];
+      const { text, provider } = await generate(messages, true);
+      const out = parseJson(text) as Record<string, unknown>;
+      return json({
+        done: out.done === true,
+        question: (out.question ?? "").toString(),
+        provider,
+      });
+    }
+
+    if (action === "blueprint") {
+      const idea: string = (body.idea ?? "").toString();
+      if (!idea.trim()) return json({ error: "Idea required" }, 400);
+      const history: { q: string; a: string }[] = Array.isArray(body.history)
+        ? body.history
+        : [];
+      const qa = history
+        .map((h, i) => `Q${i + 1}: ${h.q}\nA${i + 1}: ${h.a}`)
+        .join("\n");
+      const system =
+        "You are Cereont's project architect. From the idea and discovery " +
+        "answers, produce a complete project plan as STRICT JSON:\n" +
+        "{\n" +
+        '  "understanding": {"name":"<short project name>","objective":"<one specific, measurable outcome>","project_type":"<e.g. Business Creation, Technology Product, Construction, Import>","complexity":"Low|Medium|High","category":"<domain>","target":"<key target/scale>","budget":"<budget or empty>","timeline":"<e.g. 12 months>","success_metrics":["..."],"scope_included":["..."],"scope_excluded":["..."]},\n' +
+        '  "milestones": [{"title":"<phase/milestone>","tasks":[{"title":"<task>","priority":"critical|high|medium|low"}]}],\n' +
+        '  "risks": [{"title":"...","probability":"low|medium|high","impact":"low|medium|high","mitigation":"..."}],\n' +
+        '  "assumptions": [{"statement":"...","confidence": <integer 0-100>}]\n' +
+        "}\n" +
+        "Order milestones logically (discovery → planning → execution → " +
+        "completion). 4–7 milestones, 2–5 tasks each, 3–5 risks, 3–5 " +
+        "assumptions. Be specific to THIS project.\n\n" +
+        "BUSINESS CONTEXT (JSON):\n" + context;
+      const messages: Msg[] = [
+        { role: "system", content: system },
+        {
+          role: "user",
+          content: `Idea: ${idea}\n\nDiscovery answers:\n${qa || "(none)"}`,
+        },
+      ];
+      const { text, provider } = await generate(messages, true);
+      const blueprint = parseJson(text);
+      return json({ blueprint, provider });
+    }
+
     // Default: conversational chat.
     const message: string = (body.message ?? "").toString();
     if (!message.trim()) return json({ error: "Empty message" }, 400);

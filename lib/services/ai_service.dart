@@ -108,6 +108,164 @@ class AiService {
     }
     throw Exception('AI function returned no plan');
   }
+
+  /// Discovery interview: returns the next question, or done.
+  Future<DiscoverResult> discover({
+    required String idea,
+    required List<Map<String, String>> history,
+  }) async {
+    final res = await Supabase.instance.client.functions.invoke('ai', body: {
+      'action': 'discover',
+      'idea': idea,
+      'history': history,
+    });
+    final d = res.data;
+    if (d is Map) {
+      return DiscoverResult(
+        done: d['done'] == true,
+        question: (d['question'] ?? '').toString(),
+      );
+    }
+    throw Exception('No discovery response');
+  }
+
+  /// Full blueprint (understanding + milestones + tasks + risks + assumptions).
+  Future<ProjectBlueprint> blueprint({
+    required String idea,
+    required List<Map<String, String>> history,
+  }) async {
+    final res = await Supabase.instance.client.functions.invoke('ai', body: {
+      'action': 'blueprint',
+      'idea': idea,
+      'history': history,
+    });
+    final d = res.data;
+    if (d is Map && d['blueprint'] is Map) {
+      return ProjectBlueprint.fromJson(
+        Map<String, dynamic>.from(d['blueprint'] as Map),
+        (d['provider'] as String?) ?? 'ai',
+      );
+    }
+    throw Exception('No blueprint response');
+  }
+}
+
+class DiscoverResult {
+  final bool done;
+  final String question;
+  const DiscoverResult({required this.done, required this.question});
+}
+
+class BlueprintUnderstanding {
+  final String name;
+  final String objective;
+  final String projectType;
+  final String complexity;
+  final String category;
+  final String target;
+  final String budget;
+  final String timeline;
+  final List<String> successMetrics;
+  final List<String> scopeIncluded;
+  final List<String> scopeExcluded;
+
+  const BlueprintUnderstanding({
+    required this.name,
+    required this.objective,
+    required this.projectType,
+    required this.complexity,
+    required this.category,
+    required this.target,
+    required this.budget,
+    required this.timeline,
+    required this.successMetrics,
+    required this.scopeIncluded,
+    required this.scopeExcluded,
+  });
+
+  static String _s(dynamic v) => (v ?? '').toString();
+  static List<String> _l(dynamic v) =>
+      v is List ? v.map((e) => e.toString()).toList() : const [];
+
+  factory BlueprintUnderstanding.fromJson(Map<String, dynamic> m) =>
+      BlueprintUnderstanding(
+        name: _s(m['name']),
+        objective: _s(m['objective']),
+        projectType: _s(m['project_type']),
+        complexity: _s(m['complexity']),
+        category: _s(m['category']),
+        target: _s(m['target']),
+        budget: _s(m['budget']),
+        timeline: _s(m['timeline']),
+        successMetrics: _l(m['success_metrics']),
+        scopeIncluded: _l(m['scope_included']),
+        scopeExcluded: _l(m['scope_excluded']),
+      );
+}
+
+class BlueprintAssumption {
+  final String statement;
+  final int confidence;
+  const BlueprintAssumption(this.statement, this.confidence);
+}
+
+class ProjectBlueprint {
+  final BlueprintUnderstanding understanding;
+  final List<PlanMilestone> milestones;
+  final List<PlanRisk> risks;
+  final List<BlueprintAssumption> assumptions;
+  final String provider;
+
+  const ProjectBlueprint({
+    required this.understanding,
+    required this.milestones,
+    required this.risks,
+    required this.assumptions,
+    required this.provider,
+  });
+
+  static String _s(dynamic v) => (v ?? '').toString();
+
+  factory ProjectBlueprint.fromJson(Map<String, dynamic> m, String provider) {
+    final milestones = <PlanMilestone>[];
+    if (m['milestones'] is List) {
+      for (final ms in (m['milestones'] as List).whereType<Map>()) {
+        final tasks = <PlanTask>[];
+        if (ms['tasks'] is List) {
+          for (final t in (ms['tasks'] as List).whereType<Map>()) {
+            tasks.add(PlanTask(_s(t['title']),
+                _s(t['priority']).isEmpty ? 'medium' : _s(t['priority'])));
+          }
+        }
+        milestones.add(PlanMilestone(_s(ms['title']), tasks));
+      }
+    }
+    final risks = <PlanRisk>[];
+    if (m['risks'] is List) {
+      for (final r in (m['risks'] as List).whereType<Map>()) {
+        risks.add(PlanRisk(_s(r['title']), _s(r['probability']),
+            _s(r['impact']), _s(r['mitigation'])));
+      }
+    }
+    final assumptions = <BlueprintAssumption>[];
+    if (m['assumptions'] is List) {
+      for (final a in (m['assumptions'] as List).whereType<Map>()) {
+        final c = a['confidence'];
+        final conf = c is num ? c.round() : int.tryParse('$c') ?? 70;
+        assumptions.add(BlueprintAssumption(_s(a['statement']), conf));
+      }
+    }
+    return ProjectBlueprint(
+      understanding: BlueprintUnderstanding.fromJson(
+          m['understanding'] is Map
+              ? Map<String, dynamic>.from(m['understanding'] as Map)
+              : <String, dynamic>{}),
+      milestones: milestones,
+      risks: risks,
+      assumptions: assumptions,
+      provider: provider,
+    );
+  }
 }
 
 class ParsedMeeting {
