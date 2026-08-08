@@ -167,6 +167,34 @@ class AiService {
     }
     throw Exception('No task response');
   }
+
+  /// Dynamic replanning: impact analysis for a reported change (markdown text).
+  Future<String> replan({
+    required String change,
+    required Map<String, dynamic> project,
+  }) async {
+    final res = await Supabase.instance.client.functions.invoke('ai', body: {
+      'action': 'replan',
+      'change': change,
+      'project': project,
+    });
+    final d = res.data;
+    final a = (d is Map ? d['analysis'] : null)?.toString();
+    if (a != null && a.trim().isNotEmpty) return a;
+    throw Exception('No analysis');
+  }
+
+  /// Scenario planning: 3 what-if comparisons (markdown text).
+  Future<String> scenarios({required Map<String, dynamic> project}) async {
+    final res = await Supabase.instance.client.functions.invoke('ai', body: {
+      'action': 'scenarios',
+      'project': project,
+    });
+    final d = res.data;
+    final a = (d is Map ? d['analysis'] : null)?.toString();
+    if (a != null && a.trim().isNotEmpty) return a;
+    throw Exception('No analysis');
+  }
 }
 
 class ParsedTask {

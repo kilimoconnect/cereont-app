@@ -6,6 +6,7 @@ import '../../models/business.dart';
 import '../../models/enums.dart';
 import '../../models/project_engine.dart';
 import '../../models/work.dart';
+import '../../services/ai_service.dart';
 import '../../state/app_state.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common.dart';
@@ -60,9 +61,14 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
           : ListView(
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 96),
               children: [
+                _earlyWarningBanner(context, state, p, detail, projTasks),
                 _healthCard(context, p, health),
                 const SizedBox(height: 16),
                 _dashboard(context, state, p, detail, projTasks),
+                const SizedBox(height: 16),
+                _healthBreakdown(context, state, p, detail, projTasks),
+                const SizedBox(height: 16),
+                _adaptSection(context, state, p, detail, projTasks),
                 const SizedBox(height: 16),
                 if (p.objective.isNotEmpty) ...[
                   _objectiveCard(context, p),
@@ -342,6 +348,289 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
         ],
       ),
     );
+  }
+
+  // ---- Early warning (P5) ----------------------------------------------
+  List<({String title, String detail})> _warnings(
+      AppState state, Project p, ProjectDetail? d, List<Task> projTasks) {
+    final w = <({String title, String detail})>[];
+    final now = DateTime.now();
+    final overdue = projTasks.where((t) => t.isOverdue).toList();
+    if (overdue.isNotEmpty) {
+      w.add((
+        title: '${overdue.length} overdue task(s)',
+        detail: '"${overdue.first.title}" — clear it to protect the timeline.'
+      ));
+    }
+    final blocked =
+        projTasks.where((t) => t.status == TaskStatus.blocked).toList();
+    if (blocked.isNotEmpty) {
+      w.add((
+        title: '${blocked.length} blocked task(s)',
+        detail: '"${blocked.first.title}" is blocked.'
+      ));
+    }
+    final lines = d?.budget ?? const <BudgetLine>[];
+    double sumOf(String t) =>
+        lines.where((b) => b.type == t).fold(0.0, (s, b) => s + b.amount);
+    final budget = p.budgetAmount ?? sumOf('budget');
+    if (budget > 0 && sumOf('expense') + sumOf('committed') > budget) {
+      w.add((
+        title: 'Budget overrun risk',
+        detail: 'Projected cost exceeds the budget.'
+      ));
+    }
+    final lateMs = (d?.milestones ?? const <Milestone>[])
+        .where((m) => !m.isDone && m.dueDate != null && m.dueDate!.isBefore(now))
+        .toList();
+    if (lateMs.isNotEmpty) {
+      w.add((
+        title: '${lateMs.length} milestone(s) past due',
+        detail: '"${lateMs.first.title}" is overdue.'
+      ));
+    }
+    final atRisk = (d?.assumptions ?? const <ProjectAssumption>[])
+        .where((a) => a.status != 'holding')
+        .toList();
+    if (atRisk.isNotEmpty) {
+      w.add((
+        title: 'Assumption at risk',
+        detail: '"${atRisk.first.statement}".'
+      ));
+    }
+    if (p.daysToDeadline < 0 &&
+        p.status != 'Done' &&
+        p.status != 'Completed') {
+      w.add((
+        title: 'Project past deadline',
+        detail: '${-p.daysToDeadline} days over target.'
+      ));
+    }
+    return w;
+  }
+
+  Widget _earlyWarningBanner(BuildContext context, AppState state, Project p,
+      ProjectDetail? detail, List<Task> projTasks) {
+    final w = _warnings(state, p, detail, projTasks);
+    if (w.isEmpty) return const SizedBox.shrink();
+    const red = Color(0xFFE5484D);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: red.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: red.withValues(alpha: 0.35)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: const [
+              Icon(Icons.warning_amber_rounded, size: 16, color: red),
+              SizedBox(width: 6),
+              Text('Early warnings',
+                  style: TextStyle(fontWeight: FontWeight.w700, color: red)),
+            ]),
+            const SizedBox(height: 10),
+            ...w.take(4).map((it) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Padding(
+                        padding: EdgeInsets.only(top: 4, right: 8),
+                        child: Icon(Icons.circle, size: 6, color: red),
+                      ),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(it.title,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w700, fontSize: 13)),
+                            Text(it.detail,
+                                style:
+                                    Theme.of(context).textTheme.bodySmall),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                )),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ---- Health breakdown (P5) -------------------------------------------
+  Map<String, int> _breakdown(
+      Project p, ProjectDetail? d, List<Task> projTasks) {
+    final overdue = projTasks.where((t) => t.isOverdue).length;
+    var schedule = 100 - overdue * 12 - (p.daysToDeadline < 0 ? 30 : 0);
+    final doneT = projTasks.where((t) => t.isDone).length;
+    final taskPct = projTasks.isEmpty ? 1.0 : doneT / projTasks.length;
+    final ms = d?.milestones ?? const <Milestone>[];
+    final msPct =
+        ms.isEmpty ? taskPct : ms.where((m) => m.isDone).length / ms.length;
+    final execution = ((taskPct * 0.5 + msPct * 0.5) * 100).round();
+    final lines = d?.budget ?? const <BudgetLine>[];
+    double sumOf(String t) =>
+        lines.where((b) => b.type == t).fold(0.0, (s, b) => s + b.amount);
+    final bAmt = p.budgetAmount ?? sumOf('budget');
+    var budget = 100;
+    if (bAmt > 0) {
+      final projected = sumOf('expense') + sumOf('committed');
+      budget = (100 - ((projected - bAmt) / bAmt * 100)).round();
+    }
+    final openRisks =
+        (d?.risks ?? const <ProjectRisk>[]).where((r) => r.status == 'open');
+    final high = openRisks.where((r) => r.severity >= 3).length;
+    var risk = 100 - high * 20 - (openRisks.length - high) * 8;
+    final brokenA = (d?.assumptions ?? const <ProjectAssumption>[])
+        .where((a) => a.status == 'broken')
+        .length;
+    risk -= brokenA * 15;
+    final resCount = (d?.resources ?? const []).length;
+    final resources = resCount >= 3 ? 90 : (resCount == 0 ? 60 : 78);
+    int c(int v) => v.clamp(0, 100);
+    final overall =
+        ((c(schedule) + execution + c(budget) + c(risk) + resources) / 5)
+            .round();
+    return {
+      'Overall': overall,
+      'Schedule': c(schedule),
+      'Execution': c(execution),
+      'Budget': c(budget),
+      'Risk': c(risk),
+      'Resources': resources,
+    };
+  }
+
+  Widget _healthBreakdown(BuildContext context, AppState state, Project p,
+      ProjectDetail? detail, List<Task> projTasks) {
+    final b = _breakdown(p, detail, projTasks);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionHeader('Health breakdown'),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              children: b.entries
+                  .where((e) => e.key != 'Overall')
+                  .map((e) => _hbRow(context, e.key, e.value))
+                  .toList(),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _hbRow(BuildContext context, String label, int score) {
+    final c = score >= 80
+        ? const Color(0xFF30A46C)
+        : score >= 60
+            ? const Color(0xFFF5A524)
+            : const Color(0xFFE5484D);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          SizedBox(width: 86, child: Text(label)),
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: LinearProgressIndicator(
+                value: score / 100,
+                minHeight: 6,
+                backgroundColor: Theme.of(context).dividerColor,
+                valueColor: AlwaysStoppedAnimation(c),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          SizedBox(
+            width: 28,
+            child: Text('$score',
+                textAlign: TextAlign.right,
+                style: TextStyle(fontWeight: FontWeight.w700, color: c)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ---- Adapt: replan + scenarios (P5) ----------------------------------
+  Widget _adaptSection(BuildContext context, AppState state, Project p,
+      ProjectDetail? detail, List<Task> projTasks) {
+    final ctx = _chatContext(p, detail, projTasks);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionHeader('Adapt'),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () => _openReplan(context, state, p, ctx),
+                icon: const Icon(Icons.change_circle_outlined, size: 18),
+                label: const Text('Replan'),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () => _openScenarios(context, ctx),
+                icon: const Icon(Icons.alt_route_outlined, size: 18),
+                label: const Text('Scenarios'),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Future<void> _openReplan(BuildContext context, AppState state, Project p,
+      Map<String, dynamic> ctx) async {
+    final controller = TextEditingController();
+    final change = await showDialog<String>(
+      context: context,
+      builder: (dctx) => AlertDialog(
+        title: const Text('What changed?'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+              hintText: 'e.g. Supplier cancelled the contract'),
+          onSubmitted: (v) => Navigator.pop(dctx, v),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dctx),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(dctx, controller.text),
+              child: const Text('Analyze')),
+        ],
+      ),
+    );
+    if (change == null || change.trim().isEmpty || !context.mounted) return;
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) =>
+          _AdaptResultScreen(kind: 'replan', input: change.trim(), context: ctx),
+    ));
+  }
+
+  void _openScenarios(BuildContext context, Map<String, dynamic> ctx) {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) =>
+          _AdaptResultScreen(kind: 'scenarios', input: '', context: ctx),
+    ));
   }
 
   Widget _objectiveCard(BuildContext context, Project p) {
@@ -1009,4 +1298,99 @@ class _TLItem {
   final String title;
   final IconData icon;
   _TLItem(this.date, this.title, this.icon);
+}
+
+/// Shows AI dynamic-replanning or scenario-planning output for a project.
+class _AdaptResultScreen extends StatefulWidget {
+  final String kind; // 'replan' | 'scenarios'
+  final String input;
+  final Map<String, dynamic> context;
+  const _AdaptResultScreen(
+      {required this.kind, required this.input, required this.context});
+
+  @override
+  State<_AdaptResultScreen> createState() => _AdaptResultScreenState();
+}
+
+class _AdaptResultScreenState extends State<_AdaptResultScreen> {
+  final _ai = AiService();
+  String? _text;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _run();
+  }
+
+  Future<void> _run() async {
+    try {
+      final t = widget.kind == 'replan'
+          ? await _ai.replan(change: widget.input, project: widget.context)
+          : await _ai.scenarios(project: widget.context);
+      if (mounted) {
+        setState(() {
+          _text = t;
+          _loading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _error = 'AI is unavailable — deploy the ai function and try again.';
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final title = widget.kind == 'replan' ? 'Impact analysis' : 'Scenarios';
+    return Scaffold(
+      appBar: AppBar(title: Text(title)),
+      body: _loading
+          ? Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2)),
+                  const SizedBox(height: 14),
+                  Text(
+                      widget.kind == 'replan'
+                          ? 'Calculating the impact…'
+                          : 'Comparing scenarios…',
+                      style: Theme.of(context).textTheme.bodySmall),
+                ],
+              ),
+            )
+          : _error != null
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(28),
+                    child: Text(_error!, textAlign: TextAlign.center),
+                  ),
+                )
+              : ListView(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
+                  children: [
+                    if (widget.kind == 'replan' && widget.input.isNotEmpty)
+                      Card(
+                        child: ListTile(
+                          leading: const Icon(Icons.change_circle_outlined,
+                              color: AppColors.brand),
+                          title: const Text('Change'),
+                          subtitle: Text(widget.input),
+                        ),
+                      ),
+                    const SizedBox(height: 12),
+                    Text(_text!, style: const TextStyle(height: 1.5)),
+                  ],
+                ),
+    );
+  }
 }

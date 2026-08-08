@@ -221,6 +221,43 @@ Deno.serve(async (req) => {
       return json({ task: parseJson(out), provider });
     }
 
+    if (action === "replan") {
+      const change: string = (body.change ?? "").toString();
+      if (!change.trim()) return json({ error: "change required" }, 400);
+      const project = body.project ?? {};
+      const system =
+        "You are Cereont's project strategist. The user reports a change to " +
+        "THIS project. Produce a concise, concrete impact analysis in markdown " +
+        "with these sections: **Impact** (which tasks/milestones are affected), " +
+        "**New risks**, **Revised timeline** (a realistic estimate), " +
+        "**Budget impact**, and **Recommended plan** (specific next steps). " +
+        "Ground everything in the project data.\n\nPROJECT (JSON):\n" +
+        JSON.stringify(project);
+      const messages: Msg[] = [
+        { role: "system", content: system },
+        { role: "user", content: `Change: ${change}` },
+      ];
+      const { text, provider } = await generate(messages, false);
+      return json({ analysis: text, provider });
+    }
+
+    if (action === "scenarios") {
+      const project = body.project ?? {};
+      const system =
+        "You are Cereont's project strategist. Propose exactly 3 what-if " +
+        "scenarios for THIS project (e.g. invest more to launch faster; the " +
+        "current plan; reduce cost and launch later). For each, give a short " +
+        "name and compare Cost, Timeline, Risk and Expected outcome. Keep it " +
+        "concise markdown, then end with a one-line recommendation. Ground it " +
+        "in the project data.\n\nPROJECT (JSON):\n" + JSON.stringify(project);
+      const messages: Msg[] = [
+        { role: "system", content: system },
+        { role: "user", content: "Give me the scenarios." },
+      ];
+      const { text, provider } = await generate(messages, false);
+      return json({ analysis: text, provider });
+    }
+
     // Default: conversational chat.
     const message: string = (body.message ?? "").toString();
     if (!message.trim()) return json({ error: "Empty message" }, 400);
