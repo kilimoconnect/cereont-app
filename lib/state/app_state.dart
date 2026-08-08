@@ -195,8 +195,16 @@ class AppState extends ChangeNotifier {
   Project? projectById(String? id) =>
       id == null ? null : projects.where((p) => p.id == id).firstOrNull;
 
+  Task? taskById(String? id) =>
+      id == null ? null : tasks.where((t) => t.id == id).firstOrNull;
+  List<Task> subtasksOf(String taskId) =>
+      tasks.where((t) => t.parentTaskId == taskId).toList();
+  List<Task> tasksDependingOn(String taskId) =>
+      tasks.where((t) => t.dependsOn == taskId).toList();
+
   // ---- Derived task views ---------------------------------------------
-  List<Task> get openTasks => tasks.where((t) => !t.isDone).toList();
+  List<Task> get openTasks =>
+      tasks.where((t) => !t.isClosed && !t.isSubtask).toList();
 
   List<Task> get todaysPriorities {
     final list = openTasks.toList()

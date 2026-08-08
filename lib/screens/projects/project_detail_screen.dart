@@ -61,6 +61,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
               children: [
                 _healthCard(context, p, health),
                 const SizedBox(height: 16),
+                _dashboard(context, state, p, detail, projTasks),
+                const SizedBox(height: 16),
                 if (p.objective.isNotEmpty) ...[
                   _objectiveCard(context, p),
                   const SizedBox(height: 16),
@@ -219,6 +221,144 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 fontSize: 11,
                 fontWeight: FontWeight.w600)),
       );
+
+  Widget _dashboard(BuildContext context, AppState state, Project p,
+      ProjectDetail? d, List<Task> projTasks) {
+    final ms = d?.milestones ?? const <Milestone>[];
+    final msPct = ms.isEmpty ? 0.0 : ms.where((m) => m.isDone).length / ms.length;
+    final tasksPct = projTasks.isEmpty
+        ? 0.0
+        : projTasks.where((t) => t.isDone).length / projTasks.length;
+    final openRisks =
+        (d?.risks ?? const []).where((r) => r.status == 'open').length;
+    final daysLeft = p.daysToDeadline;
+
+    // Budget: spent (expense lines) vs planned budget.
+    final budget = p.budgetAmount ??
+        (d?.budget ?? const [])
+            .where((b) => b.type == 'budget')
+            .fold<double>(0, (s, b) => s + b.amount);
+    final spent = (d?.budget ?? const [])
+        .where((b) => b.type == 'expense')
+        .fold<double>(0, (s, b) => s + b.amount);
+    final budgetLeftPct =
+        budget > 0 ? ((budget - spent) / budget).clamp(0.0, 1.0) : null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Next best action
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppColors.brand.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.brand.withValues(alpha: 0.3)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: const [
+                Icon(Icons.bolt, size: 16, color: AppColors.brand),
+                SizedBox(width: 6),
+                Text('Next best action',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700, color: AppColors.brand)),
+              ]),
+              const SizedBox(height: 8),
+              Text(_nextBestAction(p, d, projTasks),
+                  style: const TextStyle(height: 1.4, fontSize: 14)),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            _bar(context, 'Milestones', msPct, const Color(0xFF30A46C)),
+            const SizedBox(width: 10),
+            _bar(context, 'Tasks', tasksPct, AppColors.accent),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            _stat(context, '$openRisks',
+                openRisks == 1 ? 'open risk' : 'open risks',
+                const Color(0xFFE5484D)),
+            _stat(
+                context,
+                daysLeft < 0 ? '${-daysLeft}' : '$daysLeft',
+                daysLeft < 0 ? 'days over' : 'days left',
+                daysLeft < 0 ? const Color(0xFFE5484D) : AppColors.brand),
+            if (budgetLeftPct != null)
+              _stat(context, '${(budgetLeftPct * 100).round()}%',
+                  'budget left', const Color(0xFFF5A524)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  String _nextBestAction(Project p, ProjectDetail? d, List<Task> projTasks) {
+    final open = projTasks.where((t) => !t.isClosed).toList()
+      ..sort((a, b) => b.priority.weight.compareTo(a.priority.weight));
+    final overdue = open.where((t) => t.isOverdue).toList();
+    if (overdue.isNotEmpty) return 'Clear overdue task: "${overdue.first.title}".';
+    final blocked =
+        projTasks.where((t) => t.status == TaskStatus.blocked).toList();
+    if (blocked.isNotEmpty) return 'Unblock: "${blocked.first.title}".';
+    if (open.isNotEmpty) {
+      return 'Focus on "${open.first.title}" (${open.first.priority.label}).';
+    }
+    final nextMs = (d?.milestones ?? const []).where((m) => !m.isDone).toList();
+    if (nextMs.isNotEmpty) return 'Advance the "${nextMs.first.title}" milestone.';
+    return 'Everything is on track — plan the next milestone.';
+  }
+
+  Widget _bar(BuildContext context, String label, double pct, Color color) {
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(label, style: Theme.of(context).textTheme.bodySmall),
+              const Spacer(),
+              Text('${(pct * 100).round()}%',
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: color)),
+            ],
+          ),
+          const SizedBox(height: 5),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(
+              value: pct,
+              minHeight: 6,
+              backgroundColor: Theme.of(context).dividerColor,
+              valueColor: AlwaysStoppedAnimation(color),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _stat(BuildContext context, String value, String label, Color color) {
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(value,
+              style: TextStyle(
+                  fontSize: 20, fontWeight: FontWeight.w800, color: color)),
+          Text(label, style: Theme.of(context).textTheme.bodySmall),
+        ],
+      ),
+    );
+  }
 
   Widget _objectiveCard(BuildContext context, Project p) {
     return Container(

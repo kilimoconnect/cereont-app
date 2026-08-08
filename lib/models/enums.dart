@@ -53,7 +53,7 @@ extension PriorityWire on Priority {
       );
 }
 
-enum TaskStatus { open, inProgress, done }
+enum TaskStatus { open, inProgress, blocked, done, cancelled }
 
 extension TaskStatusWire on TaskStatus {
   String get wire {
@@ -62,8 +62,12 @@ extension TaskStatusWire on TaskStatus {
         return 'open';
       case TaskStatus.inProgress:
         return 'in_progress';
+      case TaskStatus.blocked:
+        return 'blocked';
       case TaskStatus.done:
         return 'done';
+      case TaskStatus.cancelled:
+        return 'cancelled';
     }
   }
 
@@ -71,8 +75,12 @@ extension TaskStatusWire on TaskStatus {
     switch (v) {
       case 'in_progress':
         return TaskStatus.inProgress;
+      case 'blocked':
+        return TaskStatus.blocked;
       case 'done':
         return TaskStatus.done;
+      case 'cancelled':
+        return TaskStatus.cancelled;
       default:
         return TaskStatus.open;
     }
@@ -83,11 +91,30 @@ extension TaskStatusX on TaskStatus {
   String get label {
     switch (this) {
       case TaskStatus.open:
-        return 'Open';
+        return 'To do';
       case TaskStatus.inProgress:
         return 'In progress';
+      case TaskStatus.blocked:
+        return 'Blocked';
       case TaskStatus.done:
-        return 'Done';
+        return 'Completed';
+      case TaskStatus.cancelled:
+        return 'Cancelled';
+    }
+  }
+
+  Color get color {
+    switch (this) {
+      case TaskStatus.open:
+        return const Color(0xFF7C8598);
+      case TaskStatus.inProgress:
+        return const Color(0xFF3E9EFF);
+      case TaskStatus.blocked:
+        return const Color(0xFFE5484D);
+      case TaskStatus.done:
+        return const Color(0xFF30A46C);
+      case TaskStatus.cancelled:
+        return const Color(0xFF7C8598);
     }
   }
 }

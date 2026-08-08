@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../models/enums.dart';
 import '../models/work.dart';
+import '../services/ai_service.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
@@ -47,7 +48,16 @@ class _TasksScreenState extends State<TasksScreen> {
     final tasks = _apply(state);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Tasks')),
+      appBar: AppBar(
+        title: const Text('Tasks'),
+        actions: [
+          IconButton(
+            tooltip: 'AI quick add',
+            icon: const Icon(Icons.auto_awesome),
+            onPressed: _aiQuickAdd,
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _edit(context, null),
         icon: const Icon(Icons.add),
@@ -102,6 +112,51 @@ class _TasksScreenState extends State<TasksScreen> {
     await Navigator.of(context).push(MaterialPageRoute(
         builder: (_) => TaskEditScreen(task: task)));
   }
+
+  Future<void> _aiQuickAdd() async {
+    final controller = TextEditingController();
+    final text = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('AI quick add'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textCapitalization: TextCapitalization.sentences,
+          decoration: const InputDecoration(
+              hintText: 'e.g. Call supplier tomorrow, high priority'),
+          onSubmitted: (v) => Navigator.pop(ctx, v),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, controller.text),
+              child: const Text('Add')),
+        ],
+      ),
+    );
+    if (!mounted || text == null || text.trim().isEmpty) return;
+    final state = context.read<AppState>();
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final p = await AiService().parseTask(text.trim());
+      state.addTask(Task(
+        id: state.newId('t'),
+        title: p.title,
+        due: p.due,
+        priority: PriorityWire.fromWire(p.priority),
+        source: 'AI',
+      ));
+      messenger.showSnackBar(SnackBar(content: Text('Added: ${p.title}')));
+    } catch (_) {
+      state.addTask(
+          Task(id: state.newId('t'), title: text.trim(), source: 'Manual'));
+      messenger.showSnackBar(
+          const SnackBar(content: Text('Added (AI unavailable)')));
+    }
+  }
 }
 
 class _TaskTile extends StatelessWidget {
@@ -130,6 +185,35 @@ class _TaskTile extends StatelessWidget {
           ),
           child: const Icon(Icons.delete_outline, color: Color(0xFFE5484D)),
         ),
+        confirmDismiss: (_) async {
+          final dependents = state.tasksDependingOn(task.id);
+          final subs = state.subtasksOf(task.id);
+          if (dependents.isEmpty && subs.isEmpty) return true;
+          return await showDialog<bool>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('Delete this task?'),
+                  content: Text([
+                    if (dependents.isNotEmpty)
+                      '${dependents.length} task(s) depend on it — removing it may increase risk.',
+                    if (subs.isNotEmpty)
+                      '${subs.length} subtask(s) will also be removed.',
+                  ].join('\n')),
+                  actions: [
+                    TextButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        child: const Text('Cancel')),
+                    FilledButton(
+                      style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFFE5484D)),
+                      onPressed: () => Navigator.pop(ctx, true),
+                      child: const Text('Delete anyway'),
+                    ),
+                  ],
+                ),
+              ) ??
+              false;
+        },
         onDismissed: (_) => state.deleteTask(task),
         child: Card(
           child: InkWell(
@@ -175,6 +259,7 @@ class _TaskTile extends StatelessWidget {
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
                             PriorityChip(task.priority, dense: true),
+                            _StatusChip(task: task),
                             if (task.due != null)
                               Pill(
                                 task.isOverdue
@@ -204,6 +289,46 @@ class _TaskTile extends StatelessWidget {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A tappable status pill that opens a menu to change a task's status.
+class _StatusChip extends StatelessWidget {
+  final Task task;
+  const _StatusChip({required this.task});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = task.status.color;
+    return PopupMenuButton<TaskStatus>(
+      tooltip: 'Change status',
+      onSelected: (s) => context.read<AppState>().setTaskStatus(task, s),
+      itemBuilder: (_) => TaskStatus.values
+          .map((s) => PopupMenuItem(value: s, child: Text(s.label)))
+          .toList(),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: c.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: c.withValues(alpha: 0.4)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 6,
+              height: 6,
+              decoration: BoxDecoration(color: c, shape: BoxShape.circle),
+            ),
+            const SizedBox(width: 5),
+            Text(task.status.label,
+                style: TextStyle(
+                    fontSize: 11, fontWeight: FontWeight.w700, color: c)),
+          ],
         ),
       ),
     );

@@ -148,6 +148,32 @@ class AiService {
     }
     throw Exception('No blueprint response');
   }
+
+  /// Turns natural-language text into a structured task (title/due/priority).
+  Future<ParsedTask> parseTask(String text) async {
+    final res = await Supabase.instance.client.functions.invoke('ai', body: {
+      'action': 'parse_task',
+      'text': text,
+    });
+    final d = res.data;
+    if (d is Map && d['task'] is Map) {
+      final t = Map<String, dynamic>.from(d['task'] as Map);
+      final dueStr = (t['due'] ?? '').toString();
+      return ParsedTask(
+        title: (t['title'] ?? text).toString(),
+        due: dueStr.isEmpty ? null : DateTime.tryParse(dueStr),
+        priority: (t['priority'] ?? 'medium').toString(),
+      );
+    }
+    throw Exception('No task response');
+  }
+}
+
+class ParsedTask {
+  final String title;
+  final DateTime? due;
+  final String priority;
+  const ParsedTask({required this.title, this.due, required this.priority});
 }
 
 class DiscoverResult {

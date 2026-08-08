@@ -203,6 +203,24 @@ Deno.serve(async (req) => {
       return json({ blueprint, provider });
     }
 
+    if (action === "parse_task") {
+      const text: string = (body.text ?? "").toString();
+      if (!text.trim()) return json({ error: "text required" }, 400);
+      const today = new Date().toISOString().slice(0, 10);
+      const system =
+        "Extract a single task from the user's text. Return STRICT JSON: " +
+        '{"title":"<concise task title>","due":"<ISO-8601 date, or empty>",' +
+        '"priority":"critical|high|medium|low"}. ' +
+        `Today is ${today}. Resolve relative dates (tomorrow, Friday, next week). ` +
+        "Infer priority from urgency words; default medium.";
+      const messages: Msg[] = [
+        { role: "system", content: system },
+        { role: "user", content: text },
+      ];
+      const { text: out, provider } = await generate(messages, true);
+      return json({ task: parseJson(out), provider });
+    }
+
     // Default: conversational chat.
     const message: string = (body.message ?? "").toString();
     if (!message.trim()) return json({ error: "Empty message" }, 400);

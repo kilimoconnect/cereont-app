@@ -12,6 +12,8 @@ class Task {
   String? relatedSupplierId;
   String? relatedProjectId;
   String? milestoneId;
+  String? parentTaskId;
+  String? dependsOn;
   String source; // Email, Meeting, AI, Manual
   String notes;
 
@@ -26,14 +28,19 @@ class Task {
     this.relatedSupplierId,
     this.relatedProjectId,
     this.milestoneId,
+    this.parentTaskId,
+    this.dependsOn,
     this.source = 'Manual',
     this.notes = '',
   });
 
   bool get isDone => status == TaskStatus.done;
+  bool get isClosed =>
+      status == TaskStatus.done || status == TaskStatus.cancelled;
+  bool get isSubtask => parentTaskId != null;
 
   bool get isOverdue =>
-      !isDone && due != null && due!.isBefore(DateTime.now());
+      !isClosed && due != null && due!.isBefore(DateTime.now());
 
   int? get daysToDue => due?.difference(DateTime.now()).inDays;
 
@@ -48,6 +55,8 @@ class Task {
         relatedSupplierId: m['related_supplier_id'] as String?,
         relatedProjectId: m['related_project_id'] as String?,
         milestoneId: m['milestone_id'] as String?,
+        parentTaskId: m['parent_task_id'] as String?,
+        dependsOn: m['depends_on'] as String?,
         source: m['source'] as String? ?? 'Manual',
         notes: m['notes'] as String? ?? '',
       );
@@ -62,6 +71,8 @@ class Task {
         'related_supplier_id': relatedSupplierId,
         'related_project_id': relatedProjectId,
         'milestone_id': milestoneId,
+        'parent_task_id': parentTaskId,
+        'depends_on': dependsOn,
         'source': source,
         'notes': notes,
       };
