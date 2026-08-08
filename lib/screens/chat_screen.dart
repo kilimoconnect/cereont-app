@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/work.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
+import '../widgets/formatted_text.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -51,6 +52,9 @@ class _ChatScreenState extends State<ChatScreen> {
     final thinking = state.aiThinking;
 
     return Scaffold(
+      // Composer handles the keyboard inset manually (see _composer) so the
+      // input always sits directly above the keyboard.
+      resizeToAvoidBottomInset: false,
       appBar: AppBar(
         titleSpacing: 20,
         title: Row(
@@ -155,29 +159,38 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _composer(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-        child: Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _controller,
-                textInputAction: TextInputAction.send,
-                onSubmitted: _send,
-                decoration: const InputDecoration(
-                  hintText: 'Message your chief of staff…',
+    return AnimatedPadding(
+      duration: const Duration(milliseconds: 150),
+      curve: Curves.easeOut,
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _controller,
+                  textInputAction: TextInputAction.send,
+                  onSubmitted: _send,
+                  minLines: 1,
+                  maxLines: 5,
+                  keyboardType: TextInputType.multiline,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: const InputDecoration(
+                    hintText: 'Message your chief of staff…',
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: 10),
-            FloatingActionButton.small(
-              onPressed: () => _send(_controller.text),
-              elevation: 0,
-              child: const Icon(Icons.arrow_upward),
-            ),
-          ],
+              const SizedBox(width: 10),
+              FloatingActionButton.small(
+                onPressed: () => _send(_controller.text),
+                elevation: 0,
+                child: const Icon(Icons.arrow_upward),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -212,13 +225,12 @@ class _Bubble extends StatelessWidget {
               ? null
               : Border.all(color: Theme.of(context).dividerColor),
         ),
-        child: Text(
-          message.text,
-          style: TextStyle(
-            height: 1.4,
-            color: isUser ? Colors.white : null,
-          ),
-        ),
+        child: isUser
+            ? Text(
+                message.text,
+                style: const TextStyle(height: 1.4, color: Colors.white),
+              )
+            : FormattedText(message.text),
       ),
     );
   }

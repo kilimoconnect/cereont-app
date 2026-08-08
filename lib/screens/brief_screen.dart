@@ -5,6 +5,7 @@ import '../models/executive_brief.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
+import '../widgets/formatted_text.dart';
 
 class BriefScreen extends StatefulWidget {
   const BriefScreen({super.key});
@@ -183,8 +184,7 @@ class _BriefBody extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          Text(brief.recommendation,
-              style: const TextStyle(height: 1.45, fontSize: 14)),
+          FormattedText(brief.recommendation, fontSize: 14, height: 1.45),
         ],
       ),
     );

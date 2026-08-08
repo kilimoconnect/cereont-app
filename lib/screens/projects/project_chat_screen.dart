@@ -4,6 +4,7 @@ import '../../models/business.dart';
 import '../../models/work.dart';
 import '../../services/ai_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/formatted_text.dart';
 
 /// A focused AI chat scoped to a single project.
 class ProjectChatScreen extends StatefulWidget {
@@ -57,6 +58,7 @@ class _ProjectChatScreenState extends State<ProjectChatScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       appBar: AppBar(
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -103,9 +105,14 @@ class _ProjectChatScreenState extends State<ProjectChatScreen> {
               ],
             ),
           ),
-          SafeArea(
-            top: false,
-            child: Padding(
+          AnimatedPadding(
+            duration: const Duration(milliseconds: 150),
+            curve: Curves.easeOut,
+            padding:
+                EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+            child: SafeArea(
+              top: false,
+              child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
               child: Row(
                 children: [
@@ -114,6 +121,10 @@ class _ProjectChatScreenState extends State<ProjectChatScreen> {
                       controller: _controller,
                       textInputAction: TextInputAction.send,
                       onSubmitted: _send,
+                      minLines: 1,
+                      maxLines: 5,
+                      keyboardType: TextInputType.multiline,
+                      textCapitalization: TextCapitalization.sentences,
                       decoration: const InputDecoration(
                           hintText: 'Ask about this project…'),
                     ),
@@ -126,6 +137,7 @@ class _ProjectChatScreenState extends State<ProjectChatScreen> {
                   ),
                 ],
               ),
+            ),
             ),
           ),
         ],
@@ -148,8 +160,10 @@ class _ProjectChatScreenState extends State<ProjectChatScreen> {
           border:
               isUser ? null : Border.all(color: Theme.of(context).dividerColor),
         ),
-        child: Text(m.text,
-            style: TextStyle(height: 1.4, color: isUser ? Colors.white : null)),
+        child: isUser
+            ? Text(m.text,
+                style: const TextStyle(height: 1.4, color: Colors.white))
+            : FormattedText(m.text),
       ),
     );
   }

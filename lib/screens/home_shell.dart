@@ -38,6 +38,9 @@ class _HomeShellState extends State<HomeShell> {
     return HomeNavigation(
       goToTab: goToTab,
       child: Scaffold(
+        // Let each page own its keyboard handling; without this the shell
+        // swallows the IME inset and inner composers can't rise above it.
+        resizeToAvoidBottomInset: false,
         body: IndexedStack(index: _index, children: _pages),
         floatingActionButton: _index == 0
             ? FloatingActionButton(
