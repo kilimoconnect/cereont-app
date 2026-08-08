@@ -237,6 +237,7 @@ class Project {
   String objective;
   int? healthScore;
   double? budgetAmount;
+  bool archived;
 
   Project({
     required this.id,
@@ -255,6 +256,7 @@ class Project {
     this.objective = '',
     this.healthScore,
     this.budgetAmount,
+    this.archived = false,
   });
 
   int get daysToDeadline => deadline.difference(DateTime.now()).inDays;
@@ -280,6 +282,7 @@ class Project {
             m['health_score'] == null ? null : toInt(m['health_score']),
         budgetAmount:
             m['budget_amount'] == null ? null : toDouble(m['budget_amount']),
+        archived: m['archived'] as bool? ?? false,
       );
 
   Map<String, dynamic> toMap() => {
@@ -298,6 +301,7 @@ class Project {
         'complexity': complexity,
         'objective': objective,
         if (budgetAmount != null) 'budget_amount': budgetAmount,
+        'archived': archived,
       };
 }
 

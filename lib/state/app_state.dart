@@ -475,6 +475,39 @@ class AppState extends ChangeNotifier {
     if (companyId != null) _persist(() => repo.updateProject(p));
   }
 
+  // ---- Project hub helpers --------------------------------------------
+  List<Project> get liveProjects =>
+      projects.where((p) => !p.archived).toList();
+
+  void archiveProject(Project p, bool archived) {
+    p.archived = archived;
+    notifyListeners();
+    if (companyId != null) _persist(() => repo.updateProject(p));
+  }
+
+  void deleteProject(Project p) {
+    projects.removeWhere((x) => x.id == p.id);
+    notifyListeners();
+    if (companyId != null) _persist(() => repo.deleteProject(p.id));
+  }
+
+  /// Quick, detail-free health used for hub cards (task + status based).
+  int quickHealth(Project p) => projectHealth(p, null);
+
+  /// A short AI-flavoured status line for a project card.
+  String projectStatusLine(Project p) {
+    if (p.status == 'Done' || p.status == 'Completed') return 'Completed';
+    final t = tasks.where((x) => x.relatedProjectId == p.id);
+    final overdue = t.where((x) => x.isOverdue).length;
+    if (overdue > 0) return '$overdue overdue task(s) need attention';
+    final h = quickHealth(p);
+    if (h < 50) return 'Critical — needs immediate attention';
+    if (h < 70) return 'Needs attention';
+    final dl = p.daysToDeadline;
+    if (dl < 0) return 'Past deadline';
+    return 'On track · $dl day${dl == 1 ? '' : 's'} left';
+  }
+
   void addNote(Note n) {
     notes.insert(0, n);
     notifyListeners();

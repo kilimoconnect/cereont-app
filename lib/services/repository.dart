@@ -210,6 +210,9 @@ class CereontRepository {
   Future<void> updateProject(Project p) =>
       _db.from('projects').update(p.toMap()).eq('id', p.id);
 
+  Future<void> deleteProject(String id) =>
+      _db.from('projects').delete().eq('id', id);
+
   // ---- Project engine -------------------------------------------------
   /// Inserts a project plus its AI-generated milestones, tasks and risks.
   Future<Project> createProjectWithPlan(
