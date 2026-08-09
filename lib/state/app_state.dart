@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../models/business.dart';
@@ -168,6 +170,24 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Re-runs the business analysis after the data changes (e.g. something was
+  /// deleted or archived) so the dashboard health, brief and priorities reflect
+  /// only what's still there. Debounced so a burst of edits triggers one pass.
+  Timer? _reanalyseTimer;
+  void reanalyse() {
+    if (!ready || companyId == null) return;
+    _reanalyseTimer?.cancel();
+    _reanalyseTimer = Timer(const Duration(milliseconds: 700), () {
+      loadBrief(force: true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _reanalyseTimer?.cancel();
+    super.dispose();
+  }
+
   /// Generates the executive brief via the LLM, falling back to the offline
   /// engine. Cached until [force]d (e.g. pull-to-refresh).
   Future<void> loadBrief({bool force = false}) async {
@@ -310,6 +330,7 @@ class AppState extends ChangeNotifier {
     tasks.removeWhere((x) => x.id == t.id);
     notifyListeners();
     if (companyId != null) _persist(() => repo.deleteTask(t.id));
+    reanalyse();
   }
 
   // ---- Email mutations -------------------------------------------------
@@ -568,12 +589,17 @@ class AppState extends ChangeNotifier {
     p.archived = archived;
     notifyListeners();
     if (companyId != null) _persist(() => repo.updateProject(p));
+    reanalyse();
   }
 
   void deleteProject(Project p) {
     projects.removeWhere((x) => x.id == p.id);
+    // Drop any tasks that belonged to the deleted project so the analysis and
+    // task views don't keep counting orphans.
+    tasks.removeWhere((t) => t.relatedProjectId == p.id);
     notifyListeners();
     if (companyId != null) _persist(() => repo.deleteProject(p.id));
+    reanalyse();
   }
 
   /// Quick, detail-free health used for hub cards (task + status based).

@@ -20,13 +20,13 @@ extension PriorityX on Priority {
   Color get color {
     switch (this) {
       case Priority.critical:
-        return const Color(0xFFE5484D);
+        return const Color(0xFFEF4444);
       case Priority.high:
-        return const Color(0xFFF5A524);
+        return const Color(0xFFF59E0B);
       case Priority.medium:
-        return const Color(0xFF3E9EFF);
+        return const Color(0xFF2563EB);
       case Priority.low:
-        return const Color(0xFF7C8598);
+        return const Color(0xFF94A3B8);
     }
   }
 
@@ -106,15 +106,15 @@ extension TaskStatusX on TaskStatus {
   Color get color {
     switch (this) {
       case TaskStatus.open:
-        return const Color(0xFF7C8598);
+        return const Color(0xFF94A3B8);
       case TaskStatus.inProgress:
-        return const Color(0xFF3E9EFF);
+        return const Color(0xFF2563EB);
       case TaskStatus.blocked:
-        return const Color(0xFFE5484D);
+        return const Color(0xFFEF4444);
       case TaskStatus.done:
-        return const Color(0xFF30A46C);
+        return const Color(0xFF22C55E);
       case TaskStatus.cancelled:
-        return const Color(0xFF7C8598);
+        return const Color(0xFF94A3B8);
     }
   }
 }
