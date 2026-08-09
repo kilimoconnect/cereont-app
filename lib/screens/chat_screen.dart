@@ -52,9 +52,10 @@ class _ChatScreenState extends State<ChatScreen> {
     final thinking = state.aiThinking;
 
     return Scaffold(
-      // Composer handles the keyboard inset manually (see _composer) so the
-      // input always sits directly above the keyboard.
-      resizeToAvoidBottomInset: false,
+      // This inner scaffold owns keyboard resizing (the shell disables its own).
+      // Its body Column ends with the composer, so the framework lifts the
+      // whole column above the keyboard — WhatsApp-style.
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         titleSpacing: 20,
         title: Row(
@@ -159,21 +160,19 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _composer(BuildContext context) {
-    return AnimatedPadding(
-      duration: const Duration(milliseconds: 150),
-      curve: Curves.easeOut,
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+    return Material(
+      color: Theme.of(context).scaffoldBackgroundColor,
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Expanded(
                 child: TextField(
                   controller: _controller,
-                  textInputAction: TextInputAction.send,
-                  onSubmitted: _send,
+                  textInputAction: TextInputAction.newline,
                   minLines: 1,
                   maxLines: 5,
                   keyboardType: TextInputType.multiline,

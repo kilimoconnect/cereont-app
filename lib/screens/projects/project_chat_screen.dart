@@ -58,7 +58,7 @@ class _ProjectChatScreenState extends State<ProjectChatScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      resizeToAvoidBottomInset: false,
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -105,39 +105,36 @@ class _ProjectChatScreenState extends State<ProjectChatScreen> {
               ],
             ),
           ),
-          AnimatedPadding(
-            duration: const Duration(milliseconds: 150),
-            curve: Curves.easeOut,
-            padding:
-                EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+          Material(
+            color: Theme.of(context).scaffoldBackgroundColor,
             child: SafeArea(
               top: false,
               child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _controller,
-                      textInputAction: TextInputAction.send,
-                      onSubmitted: _send,
-                      minLines: 1,
-                      maxLines: 5,
-                      keyboardType: TextInputType.multiline,
-                      textCapitalization: TextCapitalization.sentences,
-                      decoration: const InputDecoration(
-                          hintText: 'Ask about this project…'),
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _controller,
+                        textInputAction: TextInputAction.newline,
+                        minLines: 1,
+                        maxLines: 5,
+                        keyboardType: TextInputType.multiline,
+                        textCapitalization: TextCapitalization.sentences,
+                        decoration: const InputDecoration(
+                            hintText: 'Ask about this project…'),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  FloatingActionButton.small(
-                    elevation: 0,
-                    onPressed: () => _send(_controller.text),
-                    child: const Icon(Icons.arrow_upward),
-                  ),
-                ],
+                    const SizedBox(width: 10),
+                    FloatingActionButton.small(
+                      elevation: 0,
+                      onPressed: () => _send(_controller.text),
+                      child: const Icon(Icons.arrow_upward),
+                    ),
+                  ],
+                ),
               ),
-            ),
             ),
           ),
         ],
